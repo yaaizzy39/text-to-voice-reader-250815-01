@@ -1,0 +1,63 @@
+# 参照元のチャットアプリフォルダ（不要なため除外）
+example-talk-avatar-250725-02/
+
+# APIキーや設定ファイル
+.env
+.env.local
+.env.production
+config.json
+secrets.json
+
+# ログファイル
+*.log
+logs/
+
+# 一時ファイル
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# Node.jsファイル（このプロジェクトでは不使用）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# IDEファイル
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ビルドファイル
+dist/
+build/
+*.crx
+*.pem
+*.zip
+
+# Chrome拡張の秘密鍵
+key.pem
+private-key.pem
+
+# OS固有ファイル
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# バックアップファイル
+*.bak
+*.backup
+*~
+
+# 開発用テストファイル
+test-*
+debug-*

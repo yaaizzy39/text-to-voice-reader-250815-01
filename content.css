@@ -1,0 +1,61 @@
+/* Text to Voice Reader - Content Script Styles */
+
+/* 選択されたテキストのハイライト効果 */
+::selection {
+    background-color: rgba(102, 126, 234, 0.3);
+}
+
+::-moz-selection {
+    background-color: rgba(102, 126, 234, 0.3);
+}
+
+/* 読み上げボタンの追加スタイル */
+.tts-button {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+.tts-button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.5);
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .tts-button {
+        padding: 10px 16px;
+        font-size: 13px;
+        border-radius: 20px;
+    }
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+    .tts-button {
+        background: linear-gradient(135deg, #4c6ef5 0%, #6c5ce7 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .tts-button:hover {
+        background: linear-gradient(135deg, #6c5ce7 0%, #4c6ef5 100%);
+    }
+    
+    .tts-button.playing {
+        background: linear-gradient(135deg, #e84393 0%, #fd79a8 100%);
+    }
+}
+
+/* アクセシビリティ対応 */
+@media (prefers-reduced-motion: reduce) {
+    .tts-button {
+        transition: none;
+        animation: none;
+    }
+    
+    .tts-button.playing {
+        animation: none;
+    }
+}

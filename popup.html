@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text to Voice Reader - 設定</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- ヘッダー -->
+        <div class="header">
+            <div class="logo">
+                <span class="logo-icon">🔊</span>
+                <h1 class="logo-text">Text to Voice Reader</h1>
+            </div>
+            <div class="version">v1.0.0</div>
+        </div>
+
+        <!-- メインコンテンツ -->
+        <div class="content">
+            <!-- クイックアクション -->
+            <div class="section">
+                <h2>クイックアクション</h2>
+                <div class="quick-actions">
+                    <button id="testBtn" class="btn btn-primary">
+                        <span class="btn-icon">🎵</span>
+                        音声テスト
+                    </button>
+                    <button id="helpBtn" class="btn btn-secondary">
+                        <span class="btn-icon">❓</span>
+                        使い方
+                    </button>
+                </div>
+            </div>
+
+            <!-- API設定 -->
+            <div class="section">
+                <h2>AIVIS API設定</h2>
+                <div class="form-group">
+                    <label for="apiKey">APIキー</label>
+                    <div class="input-with-button">
+                        <input type="password" id="apiKey" placeholder="AIVIS APIキーを入力">
+                        <button id="toggleApiKey" class="btn-toggle" title="表示/非表示">👁️</button>
+                    </div>
+                    <div class="form-help">
+                        <a href="https://hub.aivis-project.com/cloud-api/api-keys" target="_blank">
+                            🔗 APIキーを取得
+                        </a>
+                    </div>
+                    <div id="apiStatus" class="status-indicator">
+                        <span class="status-text">APIキーを入力してください</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="modelSelect">音声モデル</label>
+                    <select id="modelSelect">
+                        <option value="">モデルを読み込み中...</option>
+                    </select>
+                    <div class="form-help">
+                        <a href="https://hub.aivis-project.com/search" target="_blank">
+                            🎤 モデル一覧を見る
+                        </a>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="customModelId">カスタムモデル追加</label>
+                    <div class="input-with-button">
+                        <input type="text" id="customModelId" placeholder="モデルUUID">
+                        <button id="addModelBtn" class="btn-add">追加</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 音声設定 -->
+            <div class="section">
+                <h2>音声設定</h2>
+                
+                <div class="form-group">
+                    <label for="speedSlider">再生速度: <span id="speedValue">1.0</span>x</label>
+                    <input type="range" id="speedSlider" min="0.5" max="2.0" step="0.1" value="1.0" class="slider">
+                </div>
+
+                <div class="form-group">
+                    <label for="volumeSlider">音量: <span id="volumeValue">100</span>%</label>
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="1.0" class="slider">
+                </div>
+
+                <div class="form-group">
+                    <label for="qualitySelect">音質</label>
+                    <select id="qualitySelect">
+                        <option value="low">低品質（高速）</option>
+                        <option value="medium" selected>標準品質</option>
+                        <option value="high">高品質</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 使用方法 -->
+            <div class="section" id="helpSection" style="display: none;">
+                <h2>使い方</h2>
+                <div class="help-content">
+                    <div class="help-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <h3>APIキーを設定</h3>
+                            <p>AIVIS APIキーを上記フィールドに入力してください。</p>
+                        </div>
+                    </div>
+                    <div class="help-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <h3>テキストを選択</h3>
+                            <p>Webページ上の読み上げたいテキストを選択します。</p>
+                        </div>
+                    </div>
+                    <div class="help-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <h3>読み上げボタンをクリック</h3>
+                            <p>選択したテキストの近くに表示される「読み上げ」ボタンをクリックします。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- フッター -->
+        <div class="footer">
+            <div class="status-bar">
+                <span id="statusText">設定を読み込み中...</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知 -->
+    <div id="notification" class="notification hidden">
+        <span id="notificationText"></span>
+        <button id="notificationClose" class="notification-close">×</button>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
