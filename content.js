@@ -14,6 +14,7 @@ class TextToVoiceContent {
     }
 
     init() {
+        console.log('Text to Voice Reader Content Script が初期化されました');
         this.loadSettings();
         this.createUI();
         this.attachEventListeners();
@@ -32,27 +33,34 @@ class TextToVoiceContent {
     }
 
     createUI() {
+        console.log('createUI が呼び出されました');
+        console.log('document.body:', document.body);
+        console.log('document.body exists:', !!document.body);
+        
         // 読み上げボタンのスタイルを注入
         const style = document.createElement('style');
         style.textContent = `
             .tts-button {
-                position: fixed;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                border: none;
-                border-radius: 25px;
-                padding: 12px 20px;
-                font-size: 14px;
-                font-weight: 600;
-                cursor: pointer;
-                z-index: 999999;
-                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-                transition: all 0.3s ease;
-                display: none;
-                align-items: center;
-                gap: 8px;
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.2);
+                position: fixed !important;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+                color: white !important;
+                border: none !important;
+                border-radius: 25px !important;
+                padding: 12px 20px !important;
+                font-size: 14px !important;
+                font-weight: 600 !important;
+                cursor: pointer !important;
+                z-index: 999999 !important;
+                box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+                transition: all 0.3s ease !important;
+                display: none !important;
+                align-items: center !important;
+                gap: 8px !important;
+                backdrop-filter: blur(10px) !important;
+                border: 1px solid rgba(255, 255, 255, 0.2) !important;
+                min-width: 120px !important;
+                white-space: nowrap !important;
+                pointer-events: auto !important;
             }
             
             .tts-button:hover {
@@ -81,7 +89,21 @@ class TextToVoiceContent {
             }
         `;
         document.head.appendChild(style);
+        console.log('スタイルを追加しました');
 
+        // bodyが存在しない場合は待機
+        if (!document.body) {
+            console.log('document.body が存在しません。待機します...');
+            setTimeout(() => this.createButton(), 100);
+            return;
+        }
+        
+        this.createButton();
+    }
+    
+    createButton() {
+        console.log('createButton が呼び出されました');
+        
         // 読み上げボタンを作成
         this.button = document.createElement('button');
         this.button.className = 'tts-button';
@@ -89,13 +111,48 @@ class TextToVoiceContent {
             <span class="tts-icon">🔊</span>
             <span class="tts-text">読み上げ</span>
         `;
-        document.body.appendChild(this.button);
+        this.button.id = 'tts-reader-button'; // デバッグ用ID
+        
+        // 強制的にスタイルを適用
+        this.button.style.cssText = `
+            position: fixed !important;
+            left: 20px !important;
+            top: 20px !important;
+            background: red !important;
+            color: white !important;
+            padding: 10px 20px !important;
+            border: none !important;
+            border-radius: 5px !important;
+            z-index: 999999 !important;
+            display: block !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            font-size: 16px !important;
+        `;
+        
+        if (document.body) {
+            document.body.appendChild(this.button);
+            console.log('読み上げボタンを作成しました:', {
+                element: this.button,
+                parent: this.button.parentNode,
+                className: this.button.className,
+                innerHTML: this.button.innerHTML,
+                inDOM: document.contains(this.button)
+            });
+        } else {
+            console.error('document.body が見つかりません');
+            // bodyがない場合はdocumentElementに追加
+            document.documentElement.appendChild(this.button);
+            console.log('documentElementに追加しました');
+        }
     }
 
     attachEventListeners() {
-        // テキスト選択イベント
+        // テキスト選択イベント（少し遅延させる）
         document.addEventListener('mouseup', (e) => {
-            this.handleTextSelection(e);
+            setTimeout(() => {
+                this.handleTextSelection(e);
+            }, 10);
         });
         
         document.addEventListener('keyup', (e) => {
@@ -112,11 +169,14 @@ class TextToVoiceContent {
             this.handleButtonClick();
         });
 
-        // クリック時にボタンを非表示
+        // クリック時にボタンを非表示（少し遅延させる）
         document.addEventListener('click', (e) => {
-            if (!e.target.closest('.tts-button')) {
-                this.hideButton();
-            }
+            // テキスト選択直後のクリックを無視する
+            setTimeout(() => {
+                if (!e.target.closest('.tts-button') && !window.getSelection().toString().trim()) {
+                    this.hideButton();
+                }
+            }, 100);
         });
 
         // スクロール時にボタンを非表示
@@ -141,45 +201,83 @@ class TextToVoiceContent {
     }
 
     handleTextSelection(e) {
+        console.log('テキスト選択イベントが発生しました');
         const selection = window.getSelection();
         const selectedText = selection.toString().trim();
         
+        console.log('選択されたテキスト:', selectedText);
+        
         if (selectedText && selectedText.length > 0) {
             this.selectedText = selectedText;
+            console.log('読み上げボタンを表示します');
             this.showButton(e);
         } else {
+            console.log('テキストが選択されていないためボタンを非表示にします');
             this.hideButton();
         }
     }
 
     showButton(e) {
+        console.log('showButton が呼び出されました');
         const selection = window.getSelection();
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             
+            console.log('選択範囲の位置:', rect);
+            
             // ボタンの位置を選択範囲の右上に設定
             const x = rect.right + window.scrollX + 10;
             const y = rect.top + window.scrollY - 45;
             
-            this.button.style.left = `${Math.max(10, Math.min(x, window.innerWidth - 150))}px`;
-            this.button.style.top = `${Math.max(10, y)}px`;
-            this.button.style.display = 'flex';
+            // 画面内に収まるように位置を調整
+            const buttonWidth = 120; // ボタンの幅
+            const adjustedX = Math.max(10, Math.min(x, window.innerWidth - buttonWidth - 10));
+            const adjustedY = Math.max(10, y);
             
-            // アニメーション効果
-            this.button.style.opacity = '0';
-            this.button.style.transform = 'translateY(10px)';
-            setTimeout(() => {
-                this.button.style.transition = 'all 0.3s ease';
-                this.button.style.opacity = '1';
-                this.button.style.transform = 'translateY(0px)';
-            }, 10);
+            console.log('ボタンの配置位置:', { 
+                original: { x, y }, 
+                adjusted: { x: adjustedX, y: adjustedY },
+                windowWidth: window.innerWidth 
+            });
+            
+            // デバッグ用: ボタンを画面左上に固定表示
+            this.button.style.setProperty('left', '20px', 'important');
+            this.button.style.setProperty('top', '20px', 'important');
+            this.button.style.setProperty('z-index', '999999', 'important');
+            this.button.style.setProperty('display', 'flex', 'important');
+            this.button.style.setProperty('position', 'fixed', 'important');
+            this.button.style.setProperty('visibility', 'visible', 'important');
+            this.button.style.setProperty('opacity', '1', 'important');
+            
+            console.log('ボタンのスタイル:', {
+                display: this.button.style.display,
+                left: this.button.style.left,
+                top: this.button.style.top,
+                zIndex: this.button.style.zIndex,
+                position: this.button.style.position
+            });
+            
+            console.log('ボタンを表示しました');
+            
+            // デバッグ用: アニメーション効果を無効化
+            // this.button.style.opacity = '0';
+            // this.button.style.transform = 'translateY(10px)';
+            // setTimeout(() => {
+            //     this.button.style.transition = 'all 0.3s ease';
+            //     this.button.style.opacity = '1';
+            //     this.button.style.transform = 'translateY(0px)';
+            // }, 10);
+        } else {
+            console.log('選択範囲が見つかりませんでした');
         }
     }
 
     hideButton() {
-        this.button.style.display = 'none';
+        this.button.style.setProperty('display', 'none', 'important');
+        this.button.style.setProperty('visibility', 'hidden', 'important');
         this.selectedText = '';
+        console.log('ボタンを非表示にしました');
     }
 
     async handleButtonClick() {
@@ -398,11 +496,26 @@ class TextToVoiceContent {
     }
 }
 
-// Content script初期化
+// Content script初期化 - より確実な初期化
+console.log('Content Script が読み込まれました - document.readyState:', document.readyState);
+
+function initializeTextToVoice() {
+    console.log('TextToVoiceContent を初期化します');
+    try {
+        window.textToVoiceContent = new TextToVoiceContent();
+        console.log('TextToVoiceContent の初期化が完了しました');
+    } catch (error) {
+        console.error('TextToVoiceContent の初期化中にエラーが発生:', error);
+    }
+}
+
+// 複数のタイミングで初期化を試行
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        new TextToVoiceContent();
-    });
+    document.addEventListener('DOMContentLoaded', initializeTextToVoice);
+} else if (document.readyState === 'interactive' || document.readyState === 'complete') {
+    // ドキュメントが既に読み込まれている場合は即座に初期化
+    initializeTextToVoice();
 } else {
-    new TextToVoiceContent();
+    // フォールバック: 少し待ってから初期化
+    setTimeout(initializeTextToVoice, 100);
 }

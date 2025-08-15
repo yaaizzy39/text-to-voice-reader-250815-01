@@ -22,19 +22,14 @@
     {
       "matches": ["<all_urls>"],
       "js": ["content.js"],
-      "css": ["content.css"]
+      "css": ["content.css"],
+      "run_at": "document_end",
+      "all_frames": false
     }
   ],
   
   "action": {
     "default_popup": "popup.html",
     "default_title": "Text to Voice Reader"
-  },
-  
-  "web_accessible_resources": [
-    {
-      "resources": ["audio-player.html"],
-      "matches": ["<all_urls>"]
-    }
-  ]
+  }
 }
