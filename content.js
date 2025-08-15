@@ -11,6 +11,9 @@ class TextToVoiceContent {
         };
         
         this.init();
+        
+        // 定期的にテキスト選択をチェック
+        this.startSelectionPolling();
     }
 
     init() {
@@ -19,6 +22,25 @@ class TextToVoiceContent {
         this.createUI();
         this.attachEventListeners();
         this.setupContextMenu();
+    }
+    
+    // 定期的なテキスト選択監視（SPAやイベント制御が厳しいサイト用）
+    startSelectionPolling() {
+        let lastSelectedText = '';
+        
+        const checkSelection = () => {
+            const currentText = window.getSelection().toString().trim();
+            
+            if (currentText !== lastSelectedText) {
+                console.log('ポーリングでテキスト選択変更を検出:', currentText.substring(0, 30));
+                lastSelectedText = currentText;
+                this.handleTextSelection(null);
+            }
+        };
+        
+        // 500msごとにチェック
+        setInterval(checkSelection, 500);
+        console.log('テキスト選択ポーリングを開始しました');
     }
 
     async loadSettings() {
@@ -34,11 +56,32 @@ class TextToVoiceContent {
 
     createUI() {
         console.log('createUI が呼び出されました');
-        console.log('document.body:', document.body);
-        console.log('document.body exists:', !!document.body);
+        
+        try {
+            this.injectStyles();
+            this.createButton();
+        } catch (error) {
+            console.error('UI作成でエラーが発生:', error);
+            // フォールバック: 簡単な方法で再試行
+            setTimeout(() => {
+                try {
+                    this.createSimpleButton();
+                } catch (e) {
+                    console.error('フォールバック失敗:', e);
+                }
+            }, 500);
+        }
+    }
+    
+    injectStyles() {
+        // スタイルが既に注入されている場合はスキップ
+        if (document.getElementById('tts-reader-styles')) {
+            return;
+        }
         
         // 読み上げボタンのスタイルを注入
         const style = document.createElement('style');
+        style.id = 'tts-reader-styles';
         style.textContent = `
             .tts-button {
                 position: fixed !important;
@@ -88,20 +131,24 @@ class TextToVoiceContent {
                 font-size: 16px;
             }
         `;
-        document.head.appendChild(style);
-        console.log('スタイルを追加しました');
-
-        // bodyが存在しない場合は待機
-        if (!document.body) {
-            console.log('document.body が存在しません。待機します...');
-            setTimeout(() => this.createButton(), 100);
-            return;
-        }
         
-        this.createButton();
+        // headまたはdocumentElementにスタイルを追加
+        const targetElement = document.head || document.documentElement;
+        if (targetElement) {
+            targetElement.appendChild(style);
+            console.log('スタイルを追加しました');
+        } else {
+            console.warn('スタイル追加先が見つかりません');
+        }
     }
     
     createButton() {
+        // 既にボタンが存在する場合はスキップ
+        if (this.button && document.contains(this.button)) {
+            console.log('ボタンは既に存在します');
+            return;
+        }
+        
         console.log('createButton が呼び出されました');
         
         // 読み上げボタンを作成
@@ -111,48 +158,124 @@ class TextToVoiceContent {
             <span class="tts-icon">🔊</span>
             <span class="tts-text">読み上げ</span>
         `;
-        this.button.id = 'tts-reader-button'; // デバッグ用ID
+        this.button.id = 'tts-reader-button-' + Date.now(); // ユニークID
         
-        // 強制的にスタイルを適用
+        this.applyButtonStyles();
+        this.attachButtonToDOM();
+    }
+    
+    applyButtonStyles() {
+        // 初期状態では非表示
         this.button.style.cssText = `
             position: fixed !important;
-            left: 20px !important;
-            top: 20px !important;
-            background: red !important;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
             color: white !important;
-            padding: 10px 20px !important;
+            padding: 12px 20px !important;
             border: none !important;
-            border-radius: 5px !important;
-            z-index: 999999 !important;
-            display: block !important;
-            visibility: visible !important;
-            opacity: 1 !important;
-            font-size: 16px !important;
+            border-radius: 25px !important;
+            z-index: 2147483647 !important;
+            display: none !important;
+            visibility: hidden !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
+            cursor: pointer !important;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
+            min-width: 120px !important;
+            white-space: nowrap !important;
+            align-items: center !important;
+            gap: 8px !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif !important;
+            user-select: none !important;
+            pointer-events: auto !important;
         `;
+    }
+    
+    attachButtonToDOM() {
+        let targetElement = document.body;
         
-        if (document.body) {
-            document.body.appendChild(this.button);
+        // bodyが存在しない場合の代替手段
+        if (!targetElement) {
+            targetElement = document.documentElement;
+        }
+        
+        if (!targetElement) {
+            console.error('ボタンを追加する要素が見つかりません');
+            return;
+        }
+        
+        try {
+            targetElement.appendChild(this.button);
             console.log('読み上げボタンを作成しました:', {
                 element: this.button,
                 parent: this.button.parentNode,
-                className: this.button.className,
-                innerHTML: this.button.innerHTML,
+                targetElement: targetElement.tagName,
                 inDOM: document.contains(this.button)
             });
-        } else {
-            console.error('document.body が見つかりません');
-            // bodyがない場合はdocumentElementに追加
-            document.documentElement.appendChild(this.button);
-            console.log('documentElementに追加しました');
+        } catch (error) {
+            console.error('ボタンのDOM追加でエラー:', error);
         }
+    }
+    
+    // フォールバック用のシンプルなボタン作成
+    createSimpleButton() {
+        if (this.button && document.contains(this.button)) {
+            return;
+        }
+        
+        console.log('シンプルボタンを作成します');
+        
+        this.button = document.createElement('div');
+        this.button.textContent = '🔊 読み上げ';
+        this.button.style.cssText = `
+            position: fixed !important;
+            left: 10px !important;
+            top: 10px !important;
+            background: #667eea !important;
+            color: white !important;
+            padding: 10px 15px !important;
+            border-radius: 5px !important;
+            z-index: 2147483647 !important;
+            display: none !important;
+            cursor: pointer !important;
+            font-size: 14px !important;
+            font-family: Arial, sans-serif !important;
+        `;
+        
+        (document.body || document.documentElement).appendChild(this.button);
+        console.log('シンプルボタンを作成しました');
     }
 
     attachEventListeners() {
-        // テキスト選択イベント（少し遅延させる）
-        document.addEventListener('mouseup', (e) => {
-            setTimeout(() => {
-                this.handleTextSelection(e);
-            }, 10);
+        console.log('イベントリスナーを設定しています');
+        
+        // 複数のイベントタイプを監視
+        const events = ['mouseup', 'click', 'selectionchange'];
+        
+        events.forEach(eventType => {
+            if (eventType === 'selectionchange') {
+                // selectionchangeはdocumentに追加
+                document.addEventListener(eventType, (e) => {
+                    console.log('selectionchange イベント発生');
+                    setTimeout(() => {
+                        this.handleTextSelection(e);
+                    }, 50);
+                });
+            } else {
+                // その他のイベントはbubbleフェーズとcaptureフェーズの両方で監視
+                document.addEventListener(eventType, (e) => {
+                    console.log(`${eventType} イベント発生 (bubble)`);
+                    setTimeout(() => {
+                        this.handleTextSelection(e);
+                    }, 10);
+                }, false);
+                
+                document.addEventListener(eventType, (e) => {
+                    console.log(`${eventType} イベント発生 (capture)`);
+                    setTimeout(() => {
+                        this.handleTextSelection(e);
+                    }, 10);
+                }, true);
+            }
         });
         
         document.addEventListener('keyup', (e) => {
@@ -201,73 +324,109 @@ class TextToVoiceContent {
     }
 
     handleTextSelection(e) {
-        console.log('テキスト選択イベントが発生しました');
-        const selection = window.getSelection();
-        const selectedText = selection.toString().trim();
+        // 複数の方法でテキスト選択を検出
+        let selectedText = '';
         
-        console.log('選択されたテキスト:', selectedText);
+        try {
+            // 1. window.getSelection()
+            const selection = window.getSelection();
+            selectedText = selection.toString().trim();
+            
+            // 2. document.getSelection() (フォールバック)
+            if (!selectedText && document.getSelection) {
+                selectedText = document.getSelection().toString().trim();
+            }
+            
+            // 3. レンジベースの選択検出
+            if (!selectedText && selection && selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                selectedText = range.toString().trim();
+            }
+            
+            console.log('検出されたテキスト選択:', {
+                text: selectedText,
+                length: selectedText.length,
+                selectionType: selection ? selection.type : 'unknown',
+                rangeCount: selection ? selection.rangeCount : 0
+            });
+            
+        } catch (error) {
+            console.error('テキスト選択検出エラー:', error);
+        }
         
         if (selectedText && selectedText.length > 0) {
+            console.log('ボタン表示条件を満たしました:', selectedText.substring(0, 50));
             this.selectedText = selectedText;
-            console.log('読み上げボタンを表示します');
             this.showButton(e);
         } else {
-            console.log('テキストが選択されていないためボタンを非表示にします');
+            console.log('テキストが選択されていないか、条件を満たしていません');
             this.hideButton();
         }
     }
 
     showButton(e) {
-        console.log('showButton が呼び出されました');
+        if (!this.button || !document.contains(this.button)) {
+            console.error('ボタンが存在しないか、DOMから削除されています');
+            return;
+        }
+        
+        console.log('showButton() が呼び出されました');
+        
         const selection = window.getSelection();
+        console.log('選択情報:', {
+            rangeCount: selection.rangeCount,
+            toString: selection.toString()
+        });
+        
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             
             console.log('選択範囲の位置:', rect);
             
-            // ボタンの位置を選択範囲の右上に設定
-            const x = rect.right + window.scrollX + 10;
-            const y = rect.top + window.scrollY - 45;
+            // ボタンの位置を選択範囲の右上に設定（固定位置なのでscrollは不要）
+            const x = rect.right + 10;
+            const y = rect.top - 45;
             
             // 画面内に収まるように位置を調整
-            const buttonWidth = 120; // ボタンの幅
+            const buttonWidth = 120;
             const adjustedX = Math.max(10, Math.min(x, window.innerWidth - buttonWidth - 10));
-            const adjustedY = Math.max(10, y);
+            const adjustedY = Math.max(10, Math.max(y, 10)); // 最低10px上から
             
-            console.log('ボタンの配置位置:', { 
-                original: { x, y }, 
+            console.log('ボタンの配置位置:', {
+                original: { x, y },
                 adjusted: { x: adjustedX, y: adjustedY },
-                windowWidth: window.innerWidth 
+                windowSize: { width: window.innerWidth, height: window.innerHeight }
             });
             
-            // デバッグ用: ボタンを画面左上に固定表示
-            this.button.style.setProperty('left', '20px', 'important');
-            this.button.style.setProperty('top', '20px', 'important');
-            this.button.style.setProperty('z-index', '999999', 'important');
+            // ボタンを選択範囲の近くに表示
+            this.button.style.setProperty('left', `${adjustedX}px`, 'important');
+            this.button.style.setProperty('top', `${adjustedY}px`, 'important');
+            this.button.style.setProperty('z-index', '2147483647', 'important');
             this.button.style.setProperty('display', 'flex', 'important');
             this.button.style.setProperty('position', 'fixed', 'important');
             this.button.style.setProperty('visibility', 'visible', 'important');
             this.button.style.setProperty('opacity', '1', 'important');
             
-            console.log('ボタンのスタイル:', {
+            console.log('ボタンのスタイルを適用しました:', {
                 display: this.button.style.display,
+                visibility: this.button.style.visibility,
+                position: this.button.style.position,
                 left: this.button.style.left,
                 top: this.button.style.top,
-                zIndex: this.button.style.zIndex,
-                position: this.button.style.position
+                zIndex: this.button.style.zIndex
             });
             
-            console.log('ボタンを表示しました');
+            // アニメーション効果を簡素化
+            this.button.style.setProperty('opacity', '0', 'important');
+            setTimeout(() => {
+                if (this.button && document.contains(this.button)) {
+                    this.button.style.setProperty('opacity', '1', 'important');
+                    console.log('ボタンのフェードイン完了');
+                }
+            }, 50);
             
-            // デバッグ用: アニメーション効果を無効化
-            // this.button.style.opacity = '0';
-            // this.button.style.transform = 'translateY(10px)';
-            // setTimeout(() => {
-            //     this.button.style.transition = 'all 0.3s ease';
-            //     this.button.style.opacity = '1';
-            //     this.button.style.transform = 'translateY(0px)';
-            // }, 10);
+            console.log('ボタン表示処理完了');
         } else {
             console.log('選択範囲が見つかりませんでした');
         }
@@ -277,7 +436,6 @@ class TextToVoiceContent {
         this.button.style.setProperty('display', 'none', 'important');
         this.button.style.setProperty('visibility', 'hidden', 'important');
         this.selectedText = '';
-        console.log('ボタンを非表示にしました');
     }
 
     async handleButtonClick() {
@@ -496,26 +654,94 @@ class TextToVoiceContent {
     }
 }
 
-// Content script初期化 - より確実な初期化
-console.log('Content Script が読み込まれました - document.readyState:', document.readyState);
+// Content script初期化 - より確実でサイト互換性の高い初期化
+console.log('Text to Voice Reader Content Script が読み込まれました - document.readyState:', document.readyState);
+
+let initializationAttempts = 0;
+const MAX_INIT_ATTEMPTS = 5;
 
 function initializeTextToVoice() {
-    console.log('TextToVoiceContent を初期化します');
+    initializationAttempts++;
+    console.log(`TextToVoiceContent 初期化試行 ${initializationAttempts}/${MAX_INIT_ATTEMPTS}`);
+    
     try {
+        // 既に初期化されている場合はスキップ
+        if (window.textToVoiceContent) {
+            console.log('TextToVoiceContent は既に初期化されています');
+            return;
+        }
+        
+        // 必要な要素が存在するかチェック
+        if (!document.documentElement || (!document.body && initializationAttempts < MAX_INIT_ATTEMPTS)) {
+            console.log('DOM要素が準備されていません。再試行します...');
+            setTimeout(initializeTextToVoice, 200 * initializationAttempts);
+            return;
+        }
+        
         window.textToVoiceContent = new TextToVoiceContent();
         console.log('TextToVoiceContent の初期化が完了しました');
+        
     } catch (error) {
         console.error('TextToVoiceContent の初期化中にエラーが発生:', error);
+        
+        // 最大試行回数に達していない場合は再試行
+        if (initializationAttempts < MAX_INIT_ATTEMPTS) {
+            console.log(`${1000 * initializationAttempts}ms後に再試行します...`);
+            setTimeout(initializeTextToVoice, 1000 * initializationAttempts);
+        }
     }
 }
 
-// 複数のタイミングで初期化を試行
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeTextToVoice);
-} else if (document.readyState === 'interactive' || document.readyState === 'complete') {
-    // ドキュメントが既に読み込まれている場合は即座に初期化
+// 複数のタイミングで初期化を試行（SPAや動的サイトに対応）
+function startInitialization() {
+    // 即座に試行
     initializeTextToVoice();
-} else {
-    // フォールバック: 少し待ってから初期化
-    setTimeout(initializeTextToVoice, 100);
+    
+    // DOMContentLoadedイベント
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initializeTextToVoice);
+    }
+    
+    // windowのloadイベント
+    window.addEventListener('load', initializeTextToVoice);
+    
+    // 一定時間後にも試行（SPA対応）
+    setTimeout(initializeTextToVoice, 500);
+    setTimeout(initializeTextToVoice, 2000);
 }
+
+// MutationObserverでDOM変更を監視（SPA対応）
+let observer;
+function startDOMObserver() {
+    if (observer) return;
+    
+    observer = new MutationObserver((mutations) => {
+        let shouldReinitialize = false;
+        
+        for (const mutation of mutations) {
+            if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                for (const node of mutation.addedNodes) {
+                    if (node.nodeType === Node.ELEMENT_NODE && 
+                        (node.tagName === 'BODY' || node.contains(document.body))) {
+                        shouldReinitialize = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (shouldReinitialize && !window.textToVoiceContent) {
+            console.log('DOM変更を検出。再初期化します...');
+            setTimeout(initializeTextToVoice, 100);
+        }
+    });
+    
+    observer.observe(document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+}
+
+// 初期化開始
+startInitialization();
+startDOMObserver();
