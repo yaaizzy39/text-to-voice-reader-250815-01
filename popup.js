@@ -13,12 +13,25 @@ class TTSPopup {
     }
 
     async init() {
+        this.forcePopupSize();
         this.initializeElements();
         await this.loadSettings();
         this.attachEventListeners();
         this.updateUI();
         await this.loadAvailableModels();
         this.updateStatus('準備完了');
+    }
+
+    forcePopupSize() {
+        // ポップアップサイズを強制的に設定
+        document.documentElement.style.width = '400px';
+        document.documentElement.style.height = '600px';
+        document.body.style.width = '400px';
+        document.body.style.height = '600px';
+        document.body.style.minWidth = '400px';
+        document.body.style.minHeight = '600px';
+        document.body.style.maxWidth = '400px';
+        document.body.style.maxHeight = '600px';
     }
 
     initializeElements() {

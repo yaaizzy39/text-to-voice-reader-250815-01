@@ -105,8 +105,6 @@ class TTSBackground {
             // キャッシュに保存（最大50個まで）
             if (this.audioCache.size >= 50) {
                 const firstKey = this.audioCache.keys().next().value;
-                const oldUrl = this.audioCache.get(firstKey);
-                URL.revokeObjectURL(oldUrl);
                 this.audioCache.delete(firstKey);
             }
             
@@ -184,8 +182,8 @@ class TTSBackground {
                 return await this.generateFallbackSpeech(text, settings);
             }
 
-            // BlobからURLを作成
-            const audioUrl = URL.createObjectURL(audioBlob);
+            // BlobからData URLを作成（Service Workerでも利用可能）
+            const audioUrl = await this.blobToDataURL(audioBlob);
             
             console.log('音声生成成功:', {
                 size: audioBlob.size,
@@ -207,51 +205,9 @@ class TTSBackground {
         }
     }
 
-    // フォールバック音声生成（Web Speech API使用）
+    // フォールバック音声生成（Service Workerでは利用不可）
     async generateFallbackSpeech(text, settings) {
-        return new Promise((resolve, reject) => {
-            try {
-                // Web Speech APIが利用可能かチェック
-                if (!('speechSynthesis' in window)) {
-                    throw new Error('Web Speech APIが利用できません');
-                }
-
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = settings.speed || 1.0;
-                utterance.volume = settings.volume || 1.0;
-                utterance.lang = 'ja-JP';
-
-                // 日本語の音声を検索
-                const voices = speechSynthesis.getVoices();
-                const japaneseVoice = voices.find(voice => 
-                    voice.lang.includes('ja') || voice.name.includes('Japanese')
-                );
-                
-                if (japaneseVoice) {
-                    utterance.voice = japaneseVoice;
-                }
-
-                utterance.onstart = () => {
-                    console.log('フォールバック音声（Web Speech API）開始');
-                };
-
-                utterance.onend = () => {
-                    console.log('フォールバック音声（Web Speech API）終了');
-                    // Web Speech APIの場合は特別な処理を示すURLを返す
-                    resolve('web-speech-api://fallback');
-                };
-
-                utterance.onerror = (event) => {
-                    console.error('Web Speech APIエラー:', event.error);
-                    reject(new Error(`フォールバック音声エラー: ${event.error}`));
-                };
-
-                speechSynthesis.speak(utterance);
-
-            } catch (error) {
-                reject(error);
-            }
-        });
+        throw new Error('音声生成に失敗しました。AIVIS APIが利用できません。APIキーと設定を確認してください。');
     }
 
     async updateSettings(newSettings) {
@@ -265,6 +221,16 @@ class TTSBackground {
         } catch (error) {
             console.error('設定の保存に失敗:', error);
         }
+    }
+
+    // ユーティリティメソッド: BlobをData URLに変換
+    async blobToDataURL(blob) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
     }
 
     // ユーティリティメソッド: APIキーの有効性をテスト
