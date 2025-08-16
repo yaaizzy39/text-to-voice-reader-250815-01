@@ -56,6 +56,7 @@ class TTSPopup {
         // ボタン
         this.testBtn = document.getElementById('testBtn');
         this.helpBtn = document.getElementById('helpBtn');
+        this.apiDemoBtn = document.getElementById('apiDemoBtn');
         this.aivisSiteBtn = document.getElementById('aivisSiteBtn');
 
         // UI要素
@@ -174,6 +175,10 @@ class TTSPopup {
 
         this.helpBtn.addEventListener('click', () => {
             this.toggleHelp();
+        });
+
+        this.apiDemoBtn.addEventListener('click', () => {
+            this.openApiDemo();
         });
 
         this.aivisSiteBtn.addEventListener('click', () => {
@@ -484,6 +489,14 @@ class TTSPopup {
         // AIVIS APIキー取得サイトを新しいタブで開く
         chrome.tabs.create({
             url: 'https://hub.aivis-project.com/cloud-api/api-keys',
+            active: true
+        });
+    }
+
+    openApiDemo() {
+        // AIVIS APIデモサイトを新しいタブで開く
+        chrome.tabs.create({
+            url: 'https://api.aivis-project.com/v1/demo/realtime-streaming',
             active: true
         });
     }
