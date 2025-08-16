@@ -7,7 +7,7 @@ class TextToVoiceContent {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7'
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
         };
         
         this.init();
@@ -22,6 +22,7 @@ class TextToVoiceContent {
         this.createUI();
         this.attachEventListeners();
         this.setupContextMenu();
+        this.setupMessageListener();
     }
     
     // 定期的なテキスト選択監視（SPAやイベント制御が厳しいサイト用）
@@ -52,6 +53,20 @@ class TextToVoiceContent {
         } catch (error) {
             console.error('設定の読み込みに失敗:', error);
         }
+    }
+
+    // background scriptからの設定変更通知を受信
+    setupMessageListener() {
+        chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message.action === 'settingsChanged') {
+                console.log('設定変更を受信:', message.settings);
+                this.settings = { ...this.settings, ...message.settings };
+                console.log('設定を更新しました:', this.settings);
+                
+                // 応答を送信
+                sendResponse({ success: true });
+            }
+        });
     }
 
     createUI() {
@@ -574,6 +589,9 @@ class TextToVoiceContent {
                 // ボリューム調整
                 const gainNode = audioContext.createGain();
                 gainNode.gain.value = this.settings.volume || 1.0;
+                
+                // 速度調整
+                source.playbackRate.value = this.settings.speed || 1.0;
                 
                 // 接続: source → gainNode → destination
                 source.connect(gainNode);

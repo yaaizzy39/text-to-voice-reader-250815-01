@@ -6,7 +6,7 @@ class TTSPopup {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7'
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
         };
         this.availableModels = [];
         this.init();
@@ -198,11 +198,6 @@ class TTSPopup {
                     uuid: 'a59cb814-0083-4369-8542-f51a29e72af7',
                     name: 'デフォルトモデル（女性）',
                     voice_type: 'female'
-                },
-                {
-                    uuid: 'b89dc614-1083-4369-8542-f51a29e72af8',
-                    name: 'デフォルトモデル（男性）',
-                    voice_type: 'male'
                 }
             ];
 

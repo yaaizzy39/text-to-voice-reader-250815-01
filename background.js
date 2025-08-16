@@ -7,7 +7,7 @@ class TTSBackground {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7'
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
         };
         this.init();
     }
@@ -242,8 +242,32 @@ class TTSBackground {
                 ttsSettings: this.settings
             });
             console.log('設定を保存しました:', this.settings);
+            
+            // 全タブのcontent scriptに設定変更を通知
+            this.notifySettingsChange();
         } catch (error) {
             console.error('設定の保存に失敗:', error);
+        }
+    }
+
+    // 全タブのcontent scriptに設定変更を通知
+    async notifySettingsChange() {
+        try {
+            const tabs = await chrome.tabs.query({});
+            for (const tab of tabs) {
+                try {
+                    await chrome.tabs.sendMessage(tab.id, {
+                        action: 'settingsChanged',
+                        settings: this.settings
+                    });
+                } catch (error) {
+                    // content scriptが注入されていないタブは無視
+                    console.log(`タブ ${tab.id} への通知をスキップ:`, error.message);
+                }
+            }
+            console.log('設定変更を全タブに通知しました');
+        } catch (error) {
+            console.error('設定変更通知に失敗:', error);
         }
     }
 
