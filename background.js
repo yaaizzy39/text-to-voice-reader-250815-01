@@ -1,7 +1,110 @@
 // Text to Voice Reader - Background Script
+
+// 暗号化管理クラス
+class CryptoManager {
+    constructor() {
+        // 拡張機能固有の暗号化キー（固定）
+        this.salt = 'tts-voice-reader-2024';
+        this.keyData = null;
+    }
+
+    async getKey() {
+        if (!this.keyData) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(this.salt),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            
+            this.keyData = await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: encoder.encode('salt'),
+                    iterations: 1000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+        return this.keyData;
+    }
+
+    async encryptData(plaintext) {
+        if (!plaintext) return '';
+        
+        const encoder = new TextEncoder();
+        const data = encoder.encode(plaintext);
+        const key = await this.getKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        
+        const encrypted = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: iv },
+            key,
+            data
+        );
+        
+        // IV + 暗号化データを結合してBase64エンコード
+        const combined = new Uint8Array(iv.length + encrypted.byteLength);
+        combined.set(iv);
+        combined.set(new Uint8Array(encrypted), iv.length);
+        
+        return this.arrayBufferToBase64(combined.buffer);
+    }
+
+    async decryptData(encryptedData) {
+        if (!encryptedData) return '';
+        
+        const combined = this.base64ToArrayBuffer(encryptedData);
+        const iv = combined.slice(0, 12);
+        const encrypted = combined.slice(12);
+        
+        const key = await this.getKey();
+        
+        try {
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encrypted
+            );
+            
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        } catch (error) {
+            // 復号化失敗時は空文字を返す
+            return '';
+        }
+    }
+
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    base64ToArrayBuffer(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+}
+
 class TTSBackground {
     constructor() {
         this.audioCache = new Map();
+        this.crypto = new CryptoManager();
+        this.settingsLoaded = false;
         this.settings = {
             enabled: true, // 拡張機能の有効/無効
             apiKey: '',
@@ -13,20 +116,41 @@ class TTSBackground {
         this.init();
     }
 
-    init() {
-        this.loadSettings();
+    async init() {
+        // 設定読み込み完了まで待機
+        await this.loadSettings();
         this.setupMessageHandlers();
         this.setupContextMenu();
     }
 
     async loadSettings() {
         try {
-            const result = await chrome.storage.sync.get(['ttsSettings']);
-            if (result.ttsSettings) {
+            const result = await chrome.storage.sync.get(['ttsSettings', 'ttsSettingsEncrypted']);
+            
+            // 新形式（暗号化済み）の設定があるかチェック
+            if (result.ttsSettingsEncrypted) {
+                const decryptedApiKey = await this.crypto.decryptData(result.ttsSettingsEncrypted.apiKey);
+                this.settings = { 
+                    ...this.settings, 
+                    ...result.ttsSettingsEncrypted,
+                    apiKey: decryptedApiKey
+                };
+            } 
+            // 旧形式（平文）の設定からの移行
+            else if (result.ttsSettings) {
                 this.settings = { ...this.settings, ...result.ttsSettings };
+                // 自動的に暗号化形式に移行
+                if (this.settings.apiKey) {
+                    await this.saveSettings();
+                    // 旧設定を削除
+                    await chrome.storage.sync.remove(['ttsSettings']);
+                }
             }
         } catch (error) {
             // 設定読み込み失敗時は既定値を使用
+        } finally {
+            // 成功・失敗に関わらず読み込み完了フラグを設定
+            this.settingsLoaded = true;
         }
     }
 
@@ -49,8 +173,16 @@ class TTSBackground {
             }
             
             if (message.action === 'getSettings') {
-                sendResponse({ settings: this.settings });
-                return true;
+                // 設定が初期化されていない場合は再読み込み
+                if (!this.settings.apiKey && !this.settingsLoaded) {
+                    this.loadSettings().then(() => {
+                        sendResponse({ settings: this.settings });
+                    });
+                    return true; // 非同期レスポンス
+                } else {
+                    sendResponse({ settings: this.settings });
+                    return true;
+                }
             }
         });
     }
@@ -220,14 +352,24 @@ class TTSBackground {
 
     async updateSettings(newSettings) {
         this.settings = { ...this.settings, ...newSettings };
+        await this.saveSettings();
         
+        // 全タブのcontent scriptに設定変更を通知
+        this.notifySettingsChange();
+    }
+
+    async saveSettings() {
         try {
-            await chrome.storage.sync.set({
-                ttsSettings: this.settings
-            });
+            // APIキーを暗号化して保存
+            const encryptedApiKey = await this.crypto.encryptData(this.settings.apiKey);
+            const settingsToSave = {
+                ...this.settings,
+                apiKey: encryptedApiKey
+            };
             
-            // 全タブのcontent scriptに設定変更を通知
-            this.notifySettingsChange();
+            await chrome.storage.sync.set({
+                ttsSettingsEncrypted: settingsToSave
+            });
         } catch (error) {
             // 設定保存失敗時は何もしない
         }
@@ -295,8 +437,6 @@ const ttsBackground = new TTSBackground();
 // Chrome拡張のインストール時
 chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
-        console.log('Text to Voice Reader が正常にインストールされました');
-        
         // 初回インストール時にタブを開く
         chrome.tabs.create({
             url: chrome.runtime.getURL('popup.html') + '?welcome=true'

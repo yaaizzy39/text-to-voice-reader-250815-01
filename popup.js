@@ -1,6 +1,108 @@
 // Text to Voice Reader - Popup Script
+
+// 暗号化管理クラス（background.jsと同じ）
+class CryptoManager {
+    constructor() {
+        // 拡張機能固有の暗号化キー（固定）
+        this.salt = 'tts-voice-reader-2024';
+        this.keyData = null;
+    }
+
+    async getKey() {
+        if (!this.keyData) {
+            const encoder = new TextEncoder();
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                encoder.encode(this.salt),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            
+            this.keyData = await crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: encoder.encode('salt'),
+                    iterations: 1000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['encrypt', 'decrypt']
+            );
+        }
+        return this.keyData;
+    }
+
+    async encryptData(plaintext) {
+        if (!plaintext) return '';
+        
+        const encoder = new TextEncoder();
+        const data = encoder.encode(plaintext);
+        const key = await this.getKey();
+        const iv = crypto.getRandomValues(new Uint8Array(12));
+        
+        const encrypted = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv: iv },
+            key,
+            data
+        );
+        
+        // IV + 暗号化データを結合してBase64エンコード
+        const combined = new Uint8Array(iv.length + encrypted.byteLength);
+        combined.set(iv);
+        combined.set(new Uint8Array(encrypted), iv.length);
+        
+        return this.arrayBufferToBase64(combined.buffer);
+    }
+
+    async decryptData(encryptedData) {
+        if (!encryptedData) return '';
+        
+        const combined = this.base64ToArrayBuffer(encryptedData);
+        const iv = combined.slice(0, 12);
+        const encrypted = combined.slice(12);
+        
+        const key = await this.getKey();
+        
+        try {
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                encrypted
+            );
+            
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        } catch (error) {
+            // 復号化失敗時は空文字を返す
+            return '';
+        }
+    }
+
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    }
+
+    base64ToArrayBuffer(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes;
+    }
+}
+
 class TTSPopup {
     constructor() {
+        this.crypto = new CryptoManager();
         this.settings = {
             enabled: true, // 拡張機能の有効/無効
             apiKey: '',
@@ -17,9 +119,19 @@ class TTSPopup {
     async init() {
         this.forcePopupSize();
         this.initializeElements();
+        
+        // 設定読み込み完了まで待機
         await this.loadSettings();
-        this.attachEventListeners();
+        
+        // 設定読み込み後にUIを更新
         this.updateUI();
+        
+        // APIキーフィールドを再度確認して更新
+        if (this.settings.apiKey && this.apiKeyInput) {
+            this.apiKeyInput.value = this.settings.apiKey;
+            this.updateApiStatus();
+        }
+        this.attachEventListeners();
         await this.loadAvailableModels();
         this.updateStatus('準備完了');
     }
@@ -74,12 +186,29 @@ class TTSPopup {
 
     async loadSettings() {
         try {
-            const response = await chrome.runtime.sendMessage({
-                action: 'getSettings'
-            });
+            // background scriptが完全に初期化されるまで待機
+            let retryCount = 0;
+            const maxRetries = 5;
             
-            if (response && response.settings) {
-                this.settings = response.settings;
+            while (retryCount < maxRetries) {
+                try {
+                    const response = await chrome.runtime.sendMessage({
+                        action: 'getSettings'
+                    });
+                    
+                    if (response && response.settings) {
+                        this.settings = { ...this.settings, ...response.settings };
+                        return; // 成功時は終了
+                    }
+                } catch (error) {
+                    // エラー時は再試行
+                }
+                
+                retryCount++;
+                if (retryCount < maxRetries) {
+                    // 100ms待機してから再試行
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
             }
         } catch (error) {
             // 設定の読み込み失敗時は何もしない
@@ -212,7 +341,9 @@ class TTSPopup {
         this.updateToggleLabel();
         
         // API設定
-        this.apiKeyInput.value = this.settings.apiKey;
+        if (this.apiKeyInput) {
+            this.apiKeyInput.value = this.settings.apiKey || '';
+        }
         
         // モデル選択（空白の場合は女性モデルをデフォルト選択）
         if (!this.settings.modelId) {
