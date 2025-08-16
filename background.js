@@ -111,16 +111,18 @@ class TTSBackground {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（Anneli）
         };
         this.init();
     }
 
     async init() {
-        // 設定読み込み完了まで待機
-        await this.loadSettings();
+        // メッセージハンドラーを先に設定（content scriptからの接続に備える）
         this.setupMessageHandlers();
         this.setupContextMenu();
+        
+        // 設定読み込みは並行実行
+        await this.loadSettings();
     }
 
     async loadSettings() {
@@ -154,10 +156,33 @@ class TTSBackground {
         }
     }
 
+    // 設定が確実に読み込まれるまで待機
+    async ensureSettingsLoaded() {
+        if (this.settingsLoaded) {
+            return;
+        }
+        
+        // 最大5秒まで待機
+        let attempts = 0;
+        const maxAttempts = 50; // 100ms × 50 = 5秒
+        
+        while (!this.settingsLoaded && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            attempts++;
+        }
+        
+        // まだ読み込まれていない場合は強制的に読み込み
+        if (!this.settingsLoaded) {
+            await this.loadSettings();
+        }
+    }
+
     setupMessageHandlers() {
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.action === 'generateSpeech') {
-                this.handleGenerateSpeech(message.text, message.settings)
+                // 設定読み込み完了を確認してから処理
+                this.ensureSettingsLoaded()
+                    .then(() => this.handleGenerateSpeech(message.text, message.settings))
                     .then(response => sendResponse(response))
                     .catch(error => sendResponse({ 
                         success: false, 
@@ -167,22 +192,17 @@ class TTSBackground {
             }
             
             if (message.action === 'updateSettings') {
-                this.updateSettings(message.settings);
-                sendResponse({ success: true });
+                this.updateSettings(message.settings)
+                    .then(() => sendResponse({ success: true }))
+                    .catch(error => sendResponse({ success: false, error: error.message }));
                 return true;
             }
             
             if (message.action === 'getSettings') {
-                // 設定が初期化されていない場合は再読み込み
-                if (!this.settings.apiKey && !this.settingsLoaded) {
-                    this.loadSettings().then(() => {
-                        sendResponse({ settings: this.settings });
-                    });
-                    return true; // 非同期レスポンス
-                } else {
-                    sendResponse({ settings: this.settings });
-                    return true;
-                }
+                this.ensureSettingsLoaded()
+                    .then(() => sendResponse({ settings: this.settings }))
+                    .catch(error => sendResponse({ settings: this.settings }));
+                return true; // 非同期レスポンス
             }
         });
     }

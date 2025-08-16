@@ -16,7 +16,7 @@ class TextToVoiceContent {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（Anneli）
         };
         
         this.init();
@@ -70,9 +70,7 @@ class TextToVoiceContent {
     setupMessageListener() {
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             if (message.action === 'settingsChanged') {
-                console.log('設定変更を受信:', message.settings);
                 this.settings = { ...this.settings, ...message.settings };
-                console.log('設定を更新しました:', this.settings);
                 
                 // 応答を送信
                 sendResponse({ success: true });
@@ -237,20 +235,13 @@ class TextToVoiceContent {
         }
         
         if (!targetElement) {
-            console.error('ボタンを追加する要素が見つかりません');
             return;
         }
         
         try {
             targetElement.appendChild(this.button);
-            console.log('読み上げボタンを作成しました:', {
-                element: this.button,
-                parent: this.button.parentNode,
-                targetElement: targetElement.tagName,
-                inDOM: document.contains(this.button)
-            });
         } catch (error) {
-            console.error('ボタンのDOM追加でエラー:', error);
+            // ボタン追加失敗時は何もしない
         }
     }
     
@@ -260,7 +251,6 @@ class TextToVoiceContent {
             return;
         }
         
-        console.log('シンプルボタンを作成します');
         
         this.button = document.createElement('div');
         this.button.textContent = '🔊 読み上げ';
@@ -568,7 +558,6 @@ class TextToVoiceContent {
             this.showNotification(`音声ファイルをダウンロードしました: ${filename}`, 'success');
             
         } catch (error) {
-            console.error('音声ダウンロードエラー:', error);
             this.showNotification('音声ダウンロードに失敗しました', 'error');
         }
     }
@@ -586,11 +575,22 @@ class TextToVoiceContent {
                 // 単一ブロックの場合
                 this.updateProgressModal('音声を生成中...', 0, 1);
                 
-                const response = await chrome.runtime.sendMessage({
-                    action: 'generateSpeech',
-                    text: this.textBlocks[0],
-                    settings: this.settings
-                });
+                let response;
+                try {
+                    response = await chrome.runtime.sendMessage({
+                        action: 'generateSpeech',
+                        text: this.textBlocks[0],
+                        settings: this.settings
+                    });
+                } catch (connectionError) {
+                    if (connectionError.message.includes('Could not establish connection')) {
+                        throw new Error('拡張機能との接続に失敗しました。ページを再読み込みしてみてください。');
+                    } else if (connectionError.message.includes('Receiving end does not exist')) {
+                        throw new Error('拡張機能のバックグラウンドスクリプトが応答しません。拡張機能を再読み込みしてください。');
+                    } else {
+                        throw new Error(`接続エラー: ${connectionError.message}`);
+                    }
+                }
                 
                 if (response.success && response.audioData) {
                     this.lastAudioData = {
@@ -610,11 +610,22 @@ class TextToVoiceContent {
                 for (let i = 0; i < this.textBlocks.length; i++) {
                     this.updateProgressModal(`ブロック ${i + 1}/${this.textBlocks.length} を音声合成中...`, i, this.textBlocks.length);
                     
-                    const response = await chrome.runtime.sendMessage({
-                        action: 'generateSpeech',
-                        text: this.textBlocks[i],
-                        settings: this.settings
-                    });
+                    let response;
+                    try {
+                        response = await chrome.runtime.sendMessage({
+                            action: 'generateSpeech',
+                            text: this.textBlocks[i],
+                            settings: this.settings
+                        });
+                    } catch (connectionError) {
+                        if (connectionError.message.includes('Could not establish connection')) {
+                            throw new Error('拡張機能との接続に失敗しました。ページを再読み込みしてみてください。');
+                        } else if (connectionError.message.includes('Receiving end does not exist')) {
+                            throw new Error('拡張機能のバックグラウンドスクリプトが応答しません。拡張機能を再読み込みしてください。');
+                        } else {
+                            throw new Error(`接続エラー: ${connectionError.message}`);
+                        }
+                    }
                     
                     if (response.success && response.audioData) {
                         this.audioBlocks[i] = response.audioData;
@@ -628,7 +639,6 @@ class TextToVoiceContent {
             
         } catch (error) {
             this.hideProgressModal();
-            console.error('ダウンロード用音声生成エラー:', error);
             throw error;
         }
     }
@@ -676,7 +686,6 @@ class TextToVoiceContent {
             
         } catch (error) {
             this.hideProgressModal();
-            console.error('結合音声ダウンロードエラー:', error);
             this.showNotification(`結合音声ダウンロードに失敗: ${error.message}`, 'error');
         }
     }
@@ -721,10 +730,7 @@ class TextToVoiceContent {
             return combinedArray.buffer;
             
         } catch (error) {
-            console.error('音声ブロック結合エラー:', error);
-            
             // フォールバック：Web Audio APIを使用したWAV結合
-            console.log('MP3結合に失敗、WAV結合にフォールバック');
             const wavBuffer = await this.combineAudioBlocksAsWav();
             return { buffer: wavBuffer, isWav: true };
         }
@@ -754,7 +760,7 @@ class TextToVoiceContent {
                     totalDuration += audioBuffer.duration;
                     sampleRate = audioBuffer.sampleRate;
                 } catch (decodeError) {
-                    console.warn(`ブロック${i + 1}のデコードに失敗、スキップします:`, decodeError);
+                    // デコード失敗時はスキップ
                 }
             }
         }
@@ -936,13 +942,25 @@ class TextToVoiceContent {
             this.setPlayingState(true);
             
             // Background scriptに音声生成を依頼
-            const response = await chrome.runtime.sendMessage({
-                action: 'generateSpeech',
-                text: text,
-                settings: this.settings
-            });
+            let response;
+            try {
+                response = await chrome.runtime.sendMessage({
+                    action: 'generateSpeech',
+                    text: text,
+                    settings: this.settings
+                });
+            } catch (connectionError) {
+                // Chrome拡張の接続エラーハンドリング
+                if (connectionError.message.includes('Could not establish connection')) {
+                    throw new Error('拡張機能との接続に失敗しました。ページを再読み込みしてみてください。');
+                } else if (connectionError.message.includes('Receiving end does not exist')) {
+                    throw new Error('拡張機能のバックグラウンドスクリプトが応答しません。拡張機能を再読み込みしてください。');
+                } else {
+                    throw new Error(`接続エラー: ${connectionError.message}`);
+                }
+            }
 
-            if (response.success && response.audioData) {
+            if (response && response.success && response.audioData) {
                 
                 // 各ブロックの音声データを保存
                 if (!this.audioBlocks[blockIndex]) {
@@ -976,7 +994,6 @@ class TextToVoiceContent {
             }
 
         } catch (error) {
-            console.error('音声再生エラー:', error);
             this.showNotification(`ブロック${blockIndex + 1}の音声再生エラー: ${error.message}`, 'error');
             this.setPlayingState(false);
             this.isPlayingSequence = false;

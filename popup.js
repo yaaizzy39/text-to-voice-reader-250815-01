@@ -109,7 +109,7 @@ class TTSPopup {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7', // デフォルト（女性）
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7', // デフォルト（Anneli）
             customModels: [] // カスタムモデル保存用
         };
         this.availableModels = [];
@@ -252,7 +252,7 @@ class TTSPopup {
         this.modelSelect.addEventListener('change', () => {
             this.settings.modelId = this.modelSelect.value;
             
-            // 空白の場合は女性モデルをデフォルト選択
+            // 空白の場合はAnneliをデフォルト選択
             if (!this.settings.modelId) {
                 this.settings.modelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
                 this.modelSelect.value = this.settings.modelId;
@@ -345,7 +345,7 @@ class TTSPopup {
             this.apiKeyInput.value = this.settings.apiKey || '';
         }
         
-        // モデル選択（空白の場合は女性モデルをデフォルト選択）
+        // モデル選択（空白の場合はAnneliをデフォルト選択）
         if (!this.settings.modelId) {
             this.settings.modelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
             this.saveSettings();
@@ -409,7 +409,7 @@ class TTSPopup {
             const defaultModels = [
                 {
                     uuid: 'a59cb814-0083-4369-8542-f51a29e72af7',
-                    name: 'デフォルトモデル（女性）',
+                    name: 'Anneli（女性）',
                     voice_type: 'female'
                 }
             ];
@@ -424,22 +424,22 @@ class TTSPopup {
             
             this.populateModelSelect();
             
-            // 保存された選択を復元、または女性モデルをデフォルト選択
+            // 保存された選択を復元、またはAnneliをデフォルト選択
             if (this.settings.modelId) {
                 this.modelSelect.value = this.settings.modelId;
             } else {
-                // デフォルトで女性モデルを選択
-                const femaleModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
-                this.modelSelect.value = femaleModelId;
-                this.settings.modelId = femaleModelId;
+                // デフォルトでAnneliを選択
+                const anneliModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+                this.modelSelect.value = anneliModelId;
+                this.settings.modelId = anneliModelId;
                 this.saveSettings();
             }
             
             // 選択が空白にならないように確認
             if (!this.modelSelect.value) {
-                const femaleModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
-                this.modelSelect.value = femaleModelId;
-                this.settings.modelId = femaleModelId;
+                const anneliModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+                this.modelSelect.value = anneliModelId;
+                this.settings.modelId = anneliModelId;
                 this.saveSettings();
             }
 
