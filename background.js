@@ -13,9 +13,11 @@ class TTSBackground {
     }
 
     init() {
+        console.log('Background script 初期化開始');
         this.loadSettings();
         this.setupMessageHandlers();
         this.setupContextMenu();
+        console.log('Background script 初期化完了');
     }
 
     async loadSettings() {
@@ -31,6 +33,7 @@ class TTSBackground {
 
     setupMessageHandlers() {
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            console.log('Background: メッセージ受信:', message.action);
             if (message.action === 'generateSpeech') {
                 this.handleGenerateSpeech(message.text, message.settings)
                     .then(response => sendResponse(response))
@@ -55,10 +58,13 @@ class TTSBackground {
     }
 
     setupContextMenu() {
-        chrome.contextMenus.create({
-            id: 'tts-read-selection',
-            title: '選択したテキストを読み上げ',
-            contexts: ['selection']
+        // 既存のコンテキストメニューを削除してから作成
+        chrome.contextMenus.removeAll(() => {
+            chrome.contextMenus.create({
+                id: 'tts-read-selection',
+                title: '選択したテキストを読み上げ',
+                contexts: ['selection']
+            });
         });
 
         chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -93,14 +99,14 @@ class TTSBackground {
                 console.log('キャッシュから音声を取得:', text.substring(0, 30));
                 return {
                     success: true,
-                    audioUrl: this.audioCache.get(cacheKey),
+                    audioData: this.audioCache.get(cacheKey),
                     fromCache: true
                 };
             }
 
             // AIVIS API経由で音声生成
             console.log('AIVIS APIで音声生成:', text.substring(0, 30));
-            const audioUrl = await this.generateSpeechFromAPI(text, mergedSettings);
+            const audioData = await this.generateSpeechFromAPI(text, mergedSettings);
             
             // キャッシュに保存（最大50個まで）
             if (this.audioCache.size >= 50) {
@@ -108,11 +114,11 @@ class TTSBackground {
                 this.audioCache.delete(firstKey);
             }
             
-            this.audioCache.set(cacheKey, audioUrl);
+            this.audioCache.set(cacheKey, audioData);
 
             return {
                 success: true,
-                audioUrl: audioUrl,
+                audioData: audioData,
                 fromCache: false
             };
 
@@ -136,8 +142,10 @@ class TTSBackground {
         };
 
         console.log('AIVIS APIリクエスト:', requestData);
+        console.log('使用中のAPIキー:', settings.apiKey ? `${settings.apiKey.substring(0, 10)}...` : 'なし');
 
         try {
+            console.log('AIVIS APIを呼び出し中...');
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -146,6 +154,8 @@ class TTSBackground {
                 },
                 body: JSON.stringify(requestData)
             });
+
+            console.log('AIVIS APIレスポンス:', response.status, response.statusText);
 
             if (!response.ok) {
                 let errorMessage = `AIVIS API エラー: ${response.status} ${response.statusText}`;
@@ -182,16 +192,30 @@ class TTSBackground {
                 return await this.generateFallbackSpeech(text, settings);
             }
 
-            // BlobからData URLを作成（Service Workerでも利用可能）
-            const audioUrl = await this.blobToDataURL(audioBlob);
+            // BlobをBase64に変換してcontent scriptに送信（ArrayBufferはメッセージングで失われるため）
+            const arrayBuffer = await audioBlob.arrayBuffer();
+            const uint8Array = new Uint8Array(arrayBuffer);
+            
+            // 大きな配列でもスタックオーバーフローしない安全なBase64変換
+            let binaryString = '';
+            const chunkSize = 8192; // 8KB ずつ処理
+            for (let i = 0; i < uint8Array.length; i += chunkSize) {
+                const chunk = uint8Array.slice(i, i + chunkSize);
+                binaryString += String.fromCharCode.apply(null, chunk);
+            }
+            const base64String = btoa(binaryString);
             
             console.log('音声生成成功:', {
                 size: audioBlob.size,
                 type: audioBlob.type,
-                url: audioUrl
+                arrayBufferLength: arrayBuffer.byteLength,
+                base64Length: base64String.length
             });
 
-            return audioUrl;
+            return {
+                base64Data: base64String,
+                mimeType: audioBlob.type || 'audio/mpeg'
+            };
 
         } catch (error) {
             console.error('AIVIS API呼び出しエラー:', error);
@@ -221,16 +245,6 @@ class TTSBackground {
         } catch (error) {
             console.error('設定の保存に失敗:', error);
         }
-    }
-
-    // ユーティリティメソッド: BlobをData URLに変換
-    async blobToDataURL(blob) {
-        return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
     }
 
     // ユーティリティメソッド: APIキーの有効性をテスト

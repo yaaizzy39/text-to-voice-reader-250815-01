@@ -468,8 +468,26 @@ class TextToVoiceContent {
                 settings: this.settings
             });
 
-            if (response.success && response.audioUrl) {
-                await this.playAudio(response.audioUrl);
+            if (response.success && response.audioData) {
+                console.log('受信したaudioDataの内容:', response.audioData);
+                
+                // Base64からArrayBufferに変換
+                const base64String = response.audioData.base64Data;
+                const binaryString = atob(base64String);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const arrayBuffer = bytes.buffer;
+                
+                console.log('変換後のArrayBuffer:', {
+                    isArrayBuffer: arrayBuffer instanceof ArrayBuffer,
+                    byteLength: arrayBuffer.byteLength,
+                    mimeType: response.audioData.mimeType
+                });
+                
+                // Web Audio APIで直接ArrayBufferから再生（CSP制限回避）
+                await this.playAudioBuffer(arrayBuffer);
             } else {
                 throw new Error(response.error || '音声生成に失敗しました');
             }
@@ -536,6 +554,57 @@ class TextToVoiceContent {
                     .then(() => resolve())
                     .catch(() => reject(error));
             });
+        });
+    }
+
+    // Web Audio APIでArrayBufferから直接再生（CSP制限回避）
+    async playAudioBuffer(arrayBuffer) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // AudioContextを作成
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // ArrayBufferを音声データにデコード
+                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                
+                // AudioBufferSourceNodeを作成
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                
+                // ボリューム調整
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = this.settings.volume || 1.0;
+                
+                // 接続: source → gainNode → destination
+                source.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                // 再生終了のイベントリスナー
+                source.onended = () => {
+                    this.setPlayingState(false);
+                    this.showNotification('AIVIS音声の再生が完了しました', 'success');
+                    audioContext.close();
+                    resolve();
+                };
+                
+                // エラーハンドリング
+                source.onerror = (error) => {
+                    this.setPlayingState(false);
+                    audioContext.close();
+                    reject(new Error('Web Audio API再生エラー'));
+                };
+                
+                // 再生開始
+                this.setPlayingState(true);
+                this.showNotification('AIVIS音声を再生中...', 'info');
+                console.log('Web Audio API音声開始');
+                source.start(0);
+                
+            } catch (error) {
+                console.error('Web Audio API エラー:', error);
+                this.setPlayingState(false);
+                reject(error);
+            }
         });
     }
 
