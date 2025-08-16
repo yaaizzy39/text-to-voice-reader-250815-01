@@ -444,19 +444,49 @@ class TextToVoiceContent {
             
             console.log('選択範囲の位置:', rect);
             
-            // ボタンの位置を選択範囲の右上に設定（固定位置なのでscrollは不要）
-            const x = rect.right + 10;
-            const y = rect.top - 45;
+            // 複数行選択時の処理：選択範囲の高さが30px超の場合は中央寄りに配置
+            const isMultiLine = rect.height > 30;
+            let x, y;
+            
+            if (isMultiLine) {
+                // 複数行の場合：選択範囲の右側中央に配置
+                x = rect.right + 10;
+                y = rect.top + (rect.height / 2) - 25; // ボタン高さの半分程度上に
+            } else {
+                // 単一行の場合：従来通り右上に配置
+                x = rect.right + 10;
+                y = rect.top - 45;
+            }
+            
+            // ボタンコンテナの実際の幅を取得（読み上げ + DLボタン）
+            const buttonContainerWidth = 220; // 読み上げボタン(約100px) + DLボタン(約50px) + gap(8px) + margin
             
             // 画面内に収まるように位置を調整
-            const buttonWidth = 120;
-            const adjustedX = Math.max(10, Math.min(x, window.innerWidth - buttonWidth - 10));
-            const adjustedY = Math.max(10, Math.max(y, 10)); // 最低10px上から
+            let adjustedX = x;
+            let adjustedY = Math.max(10, y); // 最低10px上から
+            
+            // 右端に収まらない場合は左側に配置
+            if (adjustedX + buttonContainerWidth > window.innerWidth - 10) {
+                // 選択範囲の左側に配置を試行
+                adjustedX = rect.left - buttonContainerWidth - 10;
+                
+                // 左側にも収まらない場合は、画面内に強制的に収める
+                if (adjustedX < 10) {
+                    adjustedX = window.innerWidth - buttonContainerWidth - 10;
+                    // それでも収まらない場合は画面中央
+                    if (adjustedX < 10) {
+                        adjustedX = Math.max(10, (window.innerWidth - buttonContainerWidth) / 2);
+                    }
+                }
+            }
             
             console.log('ボタンの配置位置:', {
                 original: { x, y },
                 adjusted: { x: adjustedX, y: adjustedY },
-                windowSize: { width: window.innerWidth, height: window.innerHeight }
+                windowSize: { width: window.innerWidth, height: window.innerHeight },
+                selectionSize: { width: rect.width, height: rect.height },
+                isMultiLine: isMultiLine,
+                buttonContainerWidth: buttonContainerWidth
             });
             
             // ボタンを選択範囲の近くに表示
