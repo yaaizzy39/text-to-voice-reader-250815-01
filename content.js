@@ -6,6 +6,10 @@ class TextToVoiceContent {
         this.currentAudioSource = null; // Web Audio APIのソースノード
         this.currentAudioContext = null; // Web Audio APIのコンテキスト
         this.lastAudioData = null; // 最後に生成した音声データを保存
+        this.textBlocks = []; // 分割されたテキストブロック
+        this.currentBlockIndex = 0; // 現在再生中のブロックインデックス
+        this.isPlayingSequence = false; // 順次再生中フラグ
+        this.audioBlocks = []; // 各ブロックの音声データ
         this.settings = {
             speed: 1.0,
             volume: 1.0,
@@ -485,7 +489,14 @@ class TextToVoiceContent {
         this.selectedText = '';
     }
 
-    downloadAudio() {
+    async downloadAudio() {
+        // 長文の場合は全ブロック結合MP3を作成
+        if (this.textBlocks && this.textBlocks.length > 1) {
+            await this.downloadCombinedAudio();
+            return;
+        }
+
+        // 単一ブロックの場合は従来通り
         if (!this.lastAudioData) {
             this.showNotification('ダウンロードする音声がありません', 'error');
             return;
@@ -530,6 +541,90 @@ class TextToVoiceContent {
         }
     }
 
+    // 全ブロック結合MP3ダウンロード
+    async downloadCombinedAudio() {
+        try {
+            this.showProgressModal(`全${this.textBlocks.length}ブロックの音声を生成中...`, 0, this.textBlocks.length);
+            
+            // 不足している音声ブロックを生成
+            for (let i = 0; i < this.textBlocks.length; i++) {
+                if (!this.audioBlocks[i]) {
+                    this.updateProgressModal(`ブロック ${i + 1}/${this.textBlocks.length} を音声合成中...`, i, this.textBlocks.length);
+                    
+                    const response = await chrome.runtime.sendMessage({
+                        action: 'generateSpeech',
+                        text: this.textBlocks[i],
+                        settings: this.settings
+                    });
+                    
+                    if (response.success && response.audioData) {
+                        this.audioBlocks[i] = response.audioData;
+                    } else {
+                        throw new Error(`ブロック${i + 1}の音声生成に失敗: ${response.error}`);
+                    }
+                }
+            }
+            
+            this.updateProgressModal('音声ファイルを結合中...', this.textBlocks.length, this.textBlocks.length);
+            
+            // 全ブロックのBase64データを結合
+            const combinedBase64 = await this.combineAudioBlocks();
+            
+            // 結合したデータをBlobに変換
+            const binaryString = atob(combinedBase64);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            const blob = new Blob([bytes], { type: 'audio/mpeg' });
+            
+            // ファイル名を生成
+            const fullText = this.textBlocks.join(' ');
+            const textForFilename = fullText.substring(0, 30).replace(/[^\w\s-]/g, '');
+            const timestamp = new Date().toISOString().slice(0, 16).replace(/[:-]/g, '');
+            const filename = `tts_combined_${textForFilename}_${timestamp}.mp3`;
+            
+            // ダウンロード実行
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            
+            document.body.appendChild(a);
+            a.click();
+            
+            // クリーンアップ
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            this.hideProgressModal();
+            this.showNotification(`結合音声ファイルをダウンロードしました: ${filename}`, 'success');
+            
+        } catch (error) {
+            this.hideProgressModal();
+            console.error('結合音声ダウンロードエラー:', error);
+            this.showNotification(`結合音声ダウンロードに失敗: ${error.message}`, 'error');
+        }
+    }
+
+    // 音声ブロックを結合（簡易的にBase64データを結合）
+    async combineAudioBlocks() {
+        // 注意: これは簡易的な結合方法です
+        // 実際のMP3ファイルの結合には専用のライブラリが必要ですが、
+        // ここでは基本的な連結を行います
+        let combinedBase64 = '';
+        
+        for (let i = 0; i < this.audioBlocks.length; i++) {
+            if (this.audioBlocks[i] && this.audioBlocks[i].base64Data) {
+                combinedBase64 += this.audioBlocks[i].base64Data;
+            }
+        }
+        
+        return combinedBase64;
+    }
+
     async handleButtonClick() {
         if (this.isPlaying) {
             this.stopPlayback();
@@ -544,12 +639,76 @@ class TextToVoiceContent {
             return;
         }
 
-        // 長すぎるテキストの制限
-        if (text.length > 1000) {
-            text = text.substring(0, 1000) + '...';
-            this.showNotification('テキストが長いため、最初の1000文字を読み上げます', 'warning');
+        // テキストを1000文字以内のブロックに分割
+        this.textBlocks = this.splitTextIntoBlocks(text, 1000);
+        this.currentBlockIndex = 0;
+        this.isPlayingSequence = true;
+        
+        if (this.textBlocks.length > 1) {
+            this.showNotification(`長文を${this.textBlocks.length}つのブロックに分割して順次再生します`, 'info');
         }
 
+        // 最初のブロックから再生開始
+        await this.playTextBlock(this.textBlocks[0], 0);
+    }
+
+    // テキストを1000文字以内のブロックに分割（改行を優先）
+    splitTextIntoBlocks(text, maxLength) {
+        if (text.length <= maxLength) {
+            return [text];
+        }
+
+        const blocks = [];
+        let remainingText = text;
+
+        while (remainingText.length > 0) {
+            if (remainingText.length <= maxLength) {
+                blocks.push(remainingText);
+                break;
+            }
+
+            // maxLength以内で最適な切断点を探す
+            let cutPoint = maxLength;
+            const searchText = remainingText.substring(0, maxLength);
+
+            // 1. 改行を優先して探す
+            const lastNewline = searchText.lastIndexOf('\n');
+            if (lastNewline > maxLength * 0.5) { // 半分以上の位置にある改行を採用
+                cutPoint = lastNewline;
+            } else {
+                // 2. 句読点を探す
+                const punctuationMarks = ['。', '！', '？', '.', '!', '?'];
+                let lastPunctuation = -1;
+                for (const mark of punctuationMarks) {
+                    const pos = searchText.lastIndexOf(mark);
+                    if (pos > lastPunctuation && pos > maxLength * 0.3) {
+                        lastPunctuation = pos + 1; // 句読点の後で切る
+                    }
+                }
+                
+                if (lastPunctuation > -1) {
+                    cutPoint = lastPunctuation;
+                } else {
+                    // 3. 空白を探す
+                    const lastSpace = Math.max(
+                        searchText.lastIndexOf(' '),
+                        searchText.lastIndexOf('　')
+                    );
+                    if (lastSpace > maxLength * 0.3) {
+                        cutPoint = lastSpace;
+                    }
+                }
+            }
+
+            blocks.push(remainingText.substring(0, cutPoint).trim());
+            remainingText = remainingText.substring(cutPoint).trim();
+        }
+
+        return blocks.filter(block => block.length > 0);
+    }
+
+    // 個別ブロックの再生
+    async playTextBlock(text, blockIndex) {
         try {
             this.setPlayingState(true);
             
@@ -561,9 +720,14 @@ class TextToVoiceContent {
             });
 
             if (response.success && response.audioData) {
-                console.log('受信したaudioDataの内容:', response.audioData);
+                console.log(`ブロック${blockIndex + 1}の音声データを取得:`, response.audioData);
                 
-                // 音声データを保存（ダウンロード用）
+                // 各ブロックの音声データを保存
+                if (!this.audioBlocks[blockIndex]) {
+                    this.audioBlocks[blockIndex] = response.audioData;
+                }
+                
+                // 最後に再生されたブロックを保存（単体ダウンロード用）
                 this.lastAudioData = {
                     base64Data: response.audioData.base64Data,
                     mimeType: response.audioData.mimeType,
@@ -580,25 +744,21 @@ class TextToVoiceContent {
                 }
                 const arrayBuffer = bytes.buffer;
                 
-                console.log('変換後のArrayBuffer:', {
-                    isArrayBuffer: arrayBuffer instanceof ArrayBuffer,
-                    byteLength: arrayBuffer.byteLength,
-                    mimeType: response.audioData.mimeType
-                });
-                
                 // ダウンロードボタンを表示
                 this.downloadButton.style.display = 'flex';
                 
                 // Web Audio APIで直接ArrayBufferから再生（CSP制限回避）
-                await this.playAudioBuffer(arrayBuffer);
+                await this.playAudioBufferWithSequence(arrayBuffer, blockIndex);
+                
             } else {
                 throw new Error(response.error || '音声生成に失敗しました');
             }
 
         } catch (error) {
             console.error('音声再生エラー:', error);
-            this.showNotification(`音声再生エラー: ${error.message}`, 'error');
+            this.showNotification(`ブロック${blockIndex + 1}の音声再生エラー: ${error.message}`, 'error');
             this.setPlayingState(false);
+            this.isPlayingSequence = false;
         }
     }
 
@@ -718,6 +878,81 @@ class TextToVoiceContent {
         });
     }
 
+    // 順次再生対応のWeb Audio API再生
+    async playAudioBufferWithSequence(arrayBuffer, blockIndex) {
+        return new Promise(async (resolve, reject) => {
+            try {
+                // 既存の再生を停止
+                this.stopCurrentWebAudio();
+                
+                // AudioContextを作成
+                this.currentAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // ArrayBufferを音声データにデコード
+                const audioBuffer = await this.currentAudioContext.decodeAudioData(arrayBuffer);
+                
+                // AudioBufferSourceNodeを作成
+                this.currentAudioSource = this.currentAudioContext.createBufferSource();
+                this.currentAudioSource.buffer = audioBuffer;
+                
+                // ボリューム調整
+                const gainNode = this.currentAudioContext.createGain();
+                gainNode.gain.value = this.settings.volume || 1.0;
+                
+                // 速度調整
+                this.currentAudioSource.playbackRate.value = this.settings.speed || 1.0;
+                
+                // 接続: source → gainNode → destination
+                this.currentAudioSource.connect(gainNode);
+                gainNode.connect(this.currentAudioContext.destination);
+                
+                // 再生終了のイベントリスナー（順次再生対応）
+                this.currentAudioSource.onended = async () => {
+                    this.cleanupWebAudio();
+                    
+                    // 次のブロックがあるかチェック
+                    if (this.isPlayingSequence && blockIndex + 1 < this.textBlocks.length) {
+                        this.currentBlockIndex = blockIndex + 1;
+                        const nextBlock = this.textBlocks[this.currentBlockIndex];
+                        this.showNotification(`ブロック${this.currentBlockIndex + 1}/${this.textBlocks.length}を再生中...`, 'info');
+                        
+                        // 次のブロックを再生
+                        await this.playTextBlock(nextBlock, this.currentBlockIndex);
+                    } else {
+                        // 全て完了
+                        this.setPlayingState(false);
+                        this.isPlayingSequence = false;
+                        const totalBlocks = this.textBlocks.length;
+                        this.showNotification(totalBlocks > 1 ? `全${totalBlocks}ブロックの再生が完了しました` : 'AIVIS音声の再生が完了しました', 'success');
+                    }
+                    resolve();
+                };
+                
+                // エラーハンドリング
+                this.currentAudioSource.onerror = (error) => {
+                    this.setPlayingState(false);
+                    this.isPlayingSequence = false;
+                    this.cleanupWebAudio();
+                    reject(new Error('Web Audio API再生エラー'));
+                };
+                
+                // 再生開始
+                this.setPlayingState(true);
+                const blockInfo = this.textBlocks.length > 1 ? ` (${blockIndex + 1}/${this.textBlocks.length})` : '';
+                this.showNotification(`AIVIS音声を再生中${blockInfo}...`, 'info');
+                console.log(`ブロック${blockIndex + 1}のWeb Audio API音声開始`);
+                this.currentAudioSource.start(0);
+                
+            } catch (error) {
+                console.error('Web Audio API エラー:', error);
+                this.setPlayingState(false);
+                this.isPlayingSequence = false;
+                this.cleanupWebAudio();
+                reject(error);
+            }
+        });
+    }
+
     // Web Speech APIフォールバック
     async playWithWebSpeechAPI(text) {
         return new Promise((resolve, reject) => {
@@ -767,6 +1002,9 @@ class TextToVoiceContent {
     }
 
     stopPlayback() {
+        // 順次再生を停止
+        this.isPlayingSequence = false;
+        
         // 通常の音声を停止
         if (this.currentAudio && !this.currentAudio.paused) {
             this.currentAudio.pause();
@@ -780,6 +1018,9 @@ class TextToVoiceContent {
         if ('speechSynthesis' in window) {
             speechSynthesis.cancel();
         }
+        
+        // プログレスモーダルを非表示
+        this.hideProgressModal();
         
         this.setPlayingState(false);
         this.showNotification('音声再生を停止しました', 'info');
@@ -832,7 +1073,7 @@ class TextToVoiceContent {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: ${type === 'error' ? '#ff4757' : type === 'warning' ? '#ffa502' : '#5352ed'};
+            background: ${type === 'error' ? '#ff4757' : type === 'warning' ? '#ffa502' : type === 'success' ? '#2ed573' : '#5352ed'};
             color: white;
             padding: 12px 20px;
             border-radius: 8px;
@@ -856,6 +1097,104 @@ class TextToVoiceContent {
                 }
             }, 300);
         }, 3000);
+    }
+
+    // プログレス表示モーダル
+    showProgressModal(message, current, total) {
+        // 既存のモーダルを削除
+        this.hideProgressModal();
+        
+        const modal = document.createElement('div');
+        modal.id = 'tts-progress-modal';
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2147483647;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        `;
+        
+        const progressBox = document.createElement('div');
+        progressBox.style.cssText = `
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            text-align: center;
+        `;
+        
+        const progressText = document.createElement('div');
+        progressText.id = 'tts-progress-text';
+        progressText.style.cssText = `
+            font-size: 16px;
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 20px;
+        `;
+        progressText.textContent = message;
+        
+        const progressBar = document.createElement('div');
+        progressBar.style.cssText = `
+            width: 100%;
+            height: 8px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        `;
+        
+        const progressFill = document.createElement('div');
+        progressFill.id = 'tts-progress-fill';
+        progressFill.style.cssText = `
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: ${(current / total) * 100}%;
+            transition: width 0.3s ease;
+        `;
+        
+        const progressPercentage = document.createElement('div');
+        progressPercentage.id = 'tts-progress-percentage';
+        progressPercentage.style.cssText = `
+            font-size: 14px;
+            color: #666;
+        `;
+        progressPercentage.textContent = `${current}/${total} (${Math.round((current / total) * 100)}%)`;
+        
+        progressBar.appendChild(progressFill);
+        progressBox.appendChild(progressText);
+        progressBox.appendChild(progressBar);
+        progressBox.appendChild(progressPercentage);
+        modal.appendChild(progressBox);
+        document.body.appendChild(modal);
+    }
+
+    // プログレス更新
+    updateProgressModal(message, current, total) {
+        const modal = document.getElementById('tts-progress-modal');
+        if (!modal) return;
+        
+        const progressText = document.getElementById('tts-progress-text');
+        const progressFill = document.getElementById('tts-progress-fill');
+        const progressPercentage = document.getElementById('tts-progress-percentage');
+        
+        if (progressText) progressText.textContent = message;
+        if (progressFill) progressFill.style.width = `${(current / total) * 100}%`;
+        if (progressPercentage) progressPercentage.textContent = `${current}/${total} (${Math.round((current / total) * 100)}%)`;
+    }
+
+    // プログレス非表示
+    hideProgressModal() {
+        const modal = document.getElementById('tts-progress-modal');
+        if (modal) {
+            modal.remove();
+        }
     }
 }
 
