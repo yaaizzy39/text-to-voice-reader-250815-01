@@ -3,6 +3,7 @@ class TextToVoiceContent {
         this.selectedText = '';
         this.isPlaying = false;
         this.currentAudio = null;
+        this.lastAudioData = null; // 最後に生成した音声データを保存
         this.settings = {
             speed: 1.0,
             volume: 1.0,
@@ -98,27 +99,38 @@ class TextToVoiceContent {
         const style = document.createElement('style');
         style.id = 'tts-reader-styles';
         style.textContent = `
-            .tts-button {
+            .tts-button-container {
                 position: fixed !important;
+                display: none !important;
+                flex-direction: row !important;
+                gap: 8px !important;
+                z-index: 999999 !important;
+                pointer-events: auto !important;
+            }
+            
+            .tts-button {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
                 color: white !important;
                 border: none !important;
                 border-radius: 25px !important;
-                padding: 12px 20px !important;
-                font-size: 14px !important;
+                padding: 12px 16px !important;
+                font-size: 12px !important;
                 font-weight: 600 !important;
                 cursor: pointer !important;
-                z-index: 999999 !important;
                 box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4) !important;
                 transition: all 0.3s ease !important;
-                display: none !important;
+                display: flex !important;
                 align-items: center !important;
-                gap: 8px !important;
+                gap: 6px !important;
                 backdrop-filter: blur(10px) !important;
                 border: 1px solid rgba(255, 255, 255, 0.2) !important;
-                min-width: 120px !important;
+                min-width: 80px !important;
                 white-space: nowrap !important;
                 pointer-events: auto !important;
+            }
+            
+            .tts-download-btn {
+                background: linear-gradient(135deg, #28a745 0%, #20c997 100%) !important;
             }
             
             .tts-button:hover {
@@ -167,13 +179,23 @@ class TextToVoiceContent {
         console.log('createButton が呼び出されました');
         
         // 読み上げボタンを作成
-        this.button = document.createElement('button');
-        this.button.className = 'tts-button';
+        this.button = document.createElement('div');
+        this.button.className = 'tts-button-container';
         this.button.innerHTML = `
-            <span class="tts-icon">🔊</span>
-            <span class="tts-text">読み上げ</span>
+            <button class="tts-button tts-play-btn">
+                <span class="tts-icon">🔊</span>
+                <span class="tts-text">読み上げ</span>
+            </button>
+            <button class="tts-button tts-download-btn" style="display: none;">
+                <span class="tts-icon">📥</span>
+                <span class="tts-text">MP3</span>
+            </button>
         `;
         this.button.id = 'tts-reader-button-' + Date.now(); // ユニークID
+        
+        // 個別のボタン要素を取得
+        this.playButton = this.button.querySelector('.tts-play-btn');
+        this.downloadButton = this.button.querySelector('.tts-download-btn');
         
         this.applyButtonStyles();
         this.attachButtonToDOM();
@@ -301,10 +323,17 @@ class TextToVoiceContent {
         });
 
         // 読み上げボタンクリック
-        this.button.addEventListener('click', (e) => {
+        this.playButton.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             this.handleButtonClick();
+        });
+
+        // ダウンロードボタンクリック
+        this.downloadButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            this.downloadAudio();
         });
 
         // クリック時にボタンを非表示（少し遅延させる）
@@ -450,7 +479,53 @@ class TextToVoiceContent {
     hideButton() {
         this.button.style.setProperty('display', 'none', 'important');
         this.button.style.setProperty('visibility', 'hidden', 'important');
+        this.downloadButton.style.display = 'none';
         this.selectedText = '';
+    }
+
+    downloadAudio() {
+        if (!this.lastAudioData) {
+            this.showNotification('ダウンロードする音声がありません', 'error');
+            return;
+        }
+
+        try {
+            // Base64をBlobに変換
+            const base64String = this.lastAudioData.base64Data;
+            const binaryString = atob(base64String);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            
+            const blob = new Blob([bytes], { type: this.lastAudioData.mimeType || 'audio/mpeg' });
+            
+            // ファイル名を生成（テキストの最初の20文字 + タイムスタンプ）
+            const textForFilename = this.lastAudioData.text.substring(0, 20).replace(/[^\w\s-]/g, '');
+            const timestamp = new Date().toISOString().slice(0, 16).replace(/[:-]/g, '');
+            const filename = `tts_${textForFilename}_${timestamp}.mp3`;
+            
+            // ダウンロードリンクを作成
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.style.display = 'none';
+            
+            // ダウンロードを実行
+            document.body.appendChild(a);
+            a.click();
+            
+            // クリーンアップ
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            this.showNotification(`音声ファイルをダウンロードしました: ${filename}`, 'success');
+            
+        } catch (error) {
+            console.error('音声ダウンロードエラー:', error);
+            this.showNotification('音声ダウンロードに失敗しました', 'error');
+        }
     }
 
     async handleButtonClick() {
@@ -486,6 +561,14 @@ class TextToVoiceContent {
             if (response.success && response.audioData) {
                 console.log('受信したaudioDataの内容:', response.audioData);
                 
+                // 音声データを保存（ダウンロード用）
+                this.lastAudioData = {
+                    base64Data: response.audioData.base64Data,
+                    mimeType: response.audioData.mimeType,
+                    text: text,
+                    timestamp: new Date().toISOString()
+                };
+                
                 // Base64からArrayBufferに変換
                 const base64String = response.audioData.base64Data;
                 const binaryString = atob(base64String);
@@ -500,6 +583,9 @@ class TextToVoiceContent {
                     byteLength: arrayBuffer.byteLength,
                     mimeType: response.audioData.mimeType
                 });
+                
+                // ダウンロードボタンを表示
+                this.downloadButton.style.display = 'flex';
                 
                 // Web Audio APIで直接ArrayBufferから再生（CSP制限回避）
                 await this.playAudioBuffer(arrayBuffer);
@@ -693,14 +779,14 @@ class TextToVoiceContent {
         this.isPlaying = isPlaying;
         
         if (isPlaying) {
-            this.button.classList.add('playing');
-            this.button.innerHTML = `
+            this.playButton.classList.add('playing');
+            this.playButton.innerHTML = `
                 <span class="tts-icon">⏸️</span>
                 <span class="tts-text">停止</span>
             `;
         } else {
-            this.button.classList.remove('playing');
-            this.button.innerHTML = `
+            this.playButton.classList.remove('playing');
+            this.playButton.innerHTML = `
                 <span class="tts-icon">🔊</span>
                 <span class="tts-text">読み上げ</span>
             `;
