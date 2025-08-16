@@ -409,14 +409,24 @@ class TTSPopup {
                 settings: this.settings
             });
 
-            if (response.success) {
+            if (response.success && response.audioData) {
+                // Base64データからBlobURLを作成
+                const base64String = response.audioData.base64Data;
+                const binaryString = atob(base64String);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: response.audioData.mimeType || 'audio/mpeg' });
+                const audioUrl = URL.createObjectURL(blob);
+                
                 // 音声を再生
-                const audio = new Audio(response.audioUrl);
+                const audio = new Audio(audioUrl);
                 audio.volume = this.settings.volume;
                 audio.playbackRate = this.settings.speed;
                 
                 audio.addEventListener('ended', () => {
-                    URL.revokeObjectURL(response.audioUrl);
+                    URL.revokeObjectURL(audioUrl);
                 });
                 
                 await audio.play();
