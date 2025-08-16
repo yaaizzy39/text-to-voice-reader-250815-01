@@ -590,7 +590,7 @@ class TextToVoiceContent {
                 const gainNode = audioContext.createGain();
                 gainNode.gain.value = this.settings.volume || 1.0;
                 
-                // 速度調整
+                // 速度調整（ピッチも変わりますが、一旦元の動作に戻します）
                 source.playbackRate.value = this.settings.speed || 1.0;
                 
                 // 接続: source → gainNode → destination

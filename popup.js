@@ -6,7 +6,8 @@ class TTSPopup {
             speed: 1.0,
             volume: 1.0,
             quality: 'medium',
-            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7' // デフォルト（女性）
+            modelId: 'a59cb814-0083-4369-8542-f51a29e72af7', // デフォルト（女性）
+            customModels: [] // カスタムモデル保存用
         };
         this.availableModels = [];
         this.init();
@@ -40,6 +41,7 @@ class TTSPopup {
         this.toggleApiKeyBtn = document.getElementById('toggleApiKey');
         this.apiStatus = document.getElementById('apiStatus');
         this.modelSelect = document.getElementById('modelSelect');
+        this.customModelNameInput = document.getElementById('customModelName');
         this.customModelIdInput = document.getElementById('customModelId');
         this.addModelBtn = document.getElementById('addModelBtn');
 
@@ -53,6 +55,7 @@ class TTSPopup {
         // ボタン
         this.testBtn = document.getElementById('testBtn');
         this.helpBtn = document.getElementById('helpBtn');
+        this.aivisSiteBtn = document.getElementById('aivisSiteBtn');
 
         // UI要素
         this.helpSection = document.getElementById('helpSection');
@@ -102,6 +105,13 @@ class TTSPopup {
 
         this.modelSelect.addEventListener('change', () => {
             this.settings.modelId = this.modelSelect.value;
+            
+            // 空白の場合は女性モデルをデフォルト選択
+            if (!this.settings.modelId) {
+                this.settings.modelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+                this.modelSelect.value = this.settings.modelId;
+            }
+            
             this.saveSettings();
         });
 
@@ -109,10 +119,29 @@ class TTSPopup {
             this.addCustomModel();
         });
 
+        this.customModelNameInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                this.addCustomModel();
+            }
+        });
+
         this.customModelIdInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 this.addCustomModel();
             }
+        });
+
+        // デバッグ用：入力フィールドの変更を監視
+        this.customModelNameInput.addEventListener('input', (e) => {
+            console.log('モデル名入力変更:', e.target.value);
+            // 入力内容を一時保存
+            localStorage.setItem('tts_temp_model_name', e.target.value);
+        });
+
+        this.customModelIdInput.addEventListener('input', (e) => {
+            console.log('UUID入力変更:', e.target.value);
+            // 入力内容を一時保存
+            localStorage.setItem('tts_temp_model_id', e.target.value);
         });
 
         // 音声設定
@@ -142,6 +171,10 @@ class TTSPopup {
             this.toggleHelp();
         });
 
+        this.aivisSiteBtn.addEventListener('click', () => {
+            this.openAivisSite();
+        });
+
         // 通知
         this.notificationClose.addEventListener('click', () => {
             this.hideNotification();
@@ -157,6 +190,12 @@ class TTSPopup {
     updateUI() {
         // API設定
         this.apiKeyInput.value = this.settings.apiKey;
+        
+        // モデル選択（空白の場合は女性モデルをデフォルト選択）
+        if (!this.settings.modelId) {
+            this.settings.modelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+            this.saveSettings();
+        }
         this.modelSelect.value = this.settings.modelId;
 
         // 音声設定
@@ -165,6 +204,16 @@ class TTSPopup {
         this.volumeSlider.value = this.settings.volume;
         this.volumeValue.textContent = Math.round(this.settings.volume * 100);
         this.qualitySelect.value = this.settings.quality;
+
+        // 一時保存された入力値を復元
+        const tempModelName = localStorage.getItem('tts_temp_model_name');
+        const tempModelId = localStorage.getItem('tts_temp_model_id');
+        if (tempModelName) {
+            this.customModelNameInput.value = tempModelName;
+        }
+        if (tempModelId) {
+            this.customModelIdInput.value = tempModelId;
+        }
 
         this.updateApiStatus();
     }
@@ -201,12 +250,33 @@ class TTSPopup {
                 }
             ];
 
-            this.availableModels = defaultModels;
+            // デフォルトモデルと保存済みカスタムモデルを結合
+            this.availableModels = [...defaultModels];
+            
+            // 保存されたカスタムモデルを追加
+            if (this.settings.customModels && this.settings.customModels.length > 0) {
+                this.availableModels.push(...this.settings.customModels);
+            }
+            
             this.populateModelSelect();
             
-            // 保存された選択を復元
+            // 保存された選択を復元、または女性モデルをデフォルト選択
             if (this.settings.modelId) {
                 this.modelSelect.value = this.settings.modelId;
+            } else {
+                // デフォルトで女性モデルを選択
+                const femaleModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+                this.modelSelect.value = femaleModelId;
+                this.settings.modelId = femaleModelId;
+                this.saveSettings();
+            }
+            
+            // 選択が空白にならないように確認
+            if (!this.modelSelect.value) {
+                const femaleModelId = 'a59cb814-0083-4369-8542-f51a29e72af7';
+                this.modelSelect.value = femaleModelId;
+                this.settings.modelId = femaleModelId;
+                this.saveSettings();
             }
 
         } catch (error) {
@@ -249,16 +319,25 @@ class TTSPopup {
             'female': '女性の声',
             'male': '男性の声',
             'young_female': '若い女性の声',
-            'young_male': '若い男性の声'
+            'young_male': '若い男性の声',
+            'custom': 'カスタムモデル'
         };
         return labels[voiceType] || 'その他';
     }
 
     addCustomModel() {
         const customId = this.customModelIdInput.value.trim();
+        const customName = this.customModelNameInput.value.trim();
+        
+        console.log('addCustomModel called:', { customId, customName });
         
         if (!customId) {
             this.showNotification('モデルUUIDを入力してください', 'error');
+            return;
+        }
+
+        if (!customName) {
+            this.showNotification('モデル名を入力してください', 'error');
             return;
         }
 
@@ -276,25 +355,41 @@ class TTSPopup {
             return;
         }
 
-        // カスタムモデルを追加
+        // カスタムモデルを作成
         const customModel = {
             uuid: customId,
-            name: `カスタムモデル (${customId.substring(0, 8)}...)`,
+            name: customName,
             voice_type: 'custom'
         };
 
+        // availableModelsに追加
         this.availableModels.push(customModel);
+        
+        // カスタムモデル配列に保存（永続化用）
+        if (!this.settings.customModels) {
+            this.settings.customModels = [];
+        }
+        this.settings.customModels.push(customModel);
+        
+        // UI更新
         this.populateModelSelect();
         
         // 追加したモデルを選択
         this.modelSelect.value = customId;
         this.settings.modelId = customId;
+        
+        // 設定を保存
         this.saveSettings();
         
         // 入力フィールドをクリア
+        this.customModelNameInput.value = '';
         this.customModelIdInput.value = '';
         
-        this.showNotification('カスタムモデルを追加しました', 'success');
+        // 一時保存もクリア
+        localStorage.removeItem('tts_temp_model_name');
+        localStorage.removeItem('tts_temp_model_id');
+        
+        this.showNotification(`カスタムモデル「${customName}」を追加しました`, 'success');
     }
 
     async testSpeech() {
@@ -368,6 +463,15 @@ class TTSPopup {
 
     updateStatus(message) {
         this.statusText.textContent = message;
+    }
+
+    openAivisSite() {
+        // AIVIS音声モデルサイトを新しいタブで開く
+        chrome.tabs.create({
+            url: 'https://hub.aivis-project.com/search',
+            active: true
+        });
+        this.showNotification('AIVIS音声モデルサイトを開きました', 'success');
     }
 }
 

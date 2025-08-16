@@ -252,6 +252,20 @@ body {
     color: #495057;
 }
 
+.btn-link {
+    background: #28a745;
+    color: white;
+    margin-left: 10px;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.btn-link:hover {
+    background: #218838;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
 .btn-icon {
     font-size: 16px;
 }

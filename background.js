@@ -134,6 +134,7 @@ class TTSBackground {
     async generateSpeechFromAPI(text, settings) {
         const apiUrl = 'https://api.aivis-project.com/v1/tts/synthesize';
         
+        // 一時的にSSMLを無効化（元の動作に戻す）
         const requestData = {
             model_uuid: settings.modelId,
             text: text,
