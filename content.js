@@ -10,6 +10,7 @@ class TextToVoiceContent {
         this.currentBlockIndex = 0; // 現在再生中のブロックインデックス
         this.isPlayingSequence = false; // 順次再生中フラグ
         this.audioBlocks = []; // 各ブロックの音声データ
+        this.isSelecting = false; // テキスト選択中フラグ
         this.settings = {
             speed: 1.0,
             volume: 1.0,
@@ -36,6 +37,11 @@ class TextToVoiceContent {
         let lastSelectedText = '';
         
         const checkSelection = () => {
+            // 選択中はチェックしない
+            if (this.isSelecting) {
+                return;
+            }
+            
             const currentText = window.getSelection().toString().trim();
             
             if (currentText !== lastSelectedText) {
@@ -282,46 +288,35 @@ class TextToVoiceContent {
         `;
         
         (document.body || document.documentElement).appendChild(this.button);
-        console.log('シンプルボタンを作成しました');
     }
 
     attachEventListeners() {
-        console.log('イベントリスナーを設定しています');
+        // マウスダウンで選択開始を検知
+        document.addEventListener('mousedown', (e) => {
+            this.isSelecting = true;
+            this.hideButton(); // 選択中はボタンを非表示
+        });
         
-        // 複数のイベントタイプを監視
-        const events = ['mouseup', 'click', 'selectionchange'];
-        
-        events.forEach(eventType => {
-            if (eventType === 'selectionchange') {
-                // selectionchangeはdocumentに追加
-                document.addEventListener(eventType, (e) => {
-                    console.log('selectionchange イベント発生');
-                    setTimeout(() => {
-                        this.handleTextSelection(e);
-                    }, 50);
-                });
-            } else {
-                // その他のイベントはbubbleフェーズとcaptureフェーズの両方で監視
-                document.addEventListener(eventType, (e) => {
-                    console.log(`${eventType} イベント発生 (bubble)`);
-                    setTimeout(() => {
-                        this.handleTextSelection(e);
-                    }, 10);
-                }, false);
-                
-                document.addEventListener(eventType, (e) => {
-                    console.log(`${eventType} イベント発生 (capture)`);
-                    setTimeout(() => {
-                        this.handleTextSelection(e);
-                    }, 10);
-                }, true);
+        // マウスアップで選択終了を検知（ボタン表示のメインタイミング）
+        document.addEventListener('mouseup', (e) => {
+            if (this.isSelecting) {
+                this.isSelecting = false;
+                // 少し遅延させてテキスト選択状態をチェック
+                setTimeout(() => {
+                    this.handleTextSelection(e);
+                }, 100);
             }
         });
         
+        // キーボードでの選択変更を検知
         document.addEventListener('keyup', (e) => {
             if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || 
-                e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                this.handleTextSelection(e);
+                e.key === 'ArrowUp' || e.key === 'ArrowDown' ||
+                e.key === 'Shift' || e.ctrlKey || e.metaKey) {
+                // キーボード選択の場合は即座チェック
+                setTimeout(() => {
+                    this.handleTextSelection(e);
+                }, 50);
             }
         });
 
