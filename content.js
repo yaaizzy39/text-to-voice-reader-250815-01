@@ -3,6 +3,8 @@ class TextToVoiceContent {
         this.selectedText = '';
         this.isPlaying = false;
         this.currentAudio = null;
+        this.currentAudioSource = null; // Web Audio APIのソースノード
+        this.currentAudioContext = null; // Web Audio APIのコンテキスト
         this.lastAudioData = null; // 最後に生成した音声データを保存
         this.settings = {
             speed: 1.0,
@@ -662,39 +664,42 @@ class TextToVoiceContent {
     async playAudioBuffer(arrayBuffer) {
         return new Promise(async (resolve, reject) => {
             try {
+                // 既存の再生を停止
+                this.stopCurrentWebAudio();
+                
                 // AudioContextを作成
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                this.currentAudioContext = new (window.AudioContext || window.webkitAudioContext)();
                 
                 // ArrayBufferを音声データにデコード
-                const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+                const audioBuffer = await this.currentAudioContext.decodeAudioData(arrayBuffer);
                 
                 // AudioBufferSourceNodeを作成
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
+                this.currentAudioSource = this.currentAudioContext.createBufferSource();
+                this.currentAudioSource.buffer = audioBuffer;
                 
                 // ボリューム調整
-                const gainNode = audioContext.createGain();
+                const gainNode = this.currentAudioContext.createGain();
                 gainNode.gain.value = this.settings.volume || 1.0;
                 
                 // 速度調整（ピッチも変わりますが、一旦元の動作に戻します）
-                source.playbackRate.value = this.settings.speed || 1.0;
+                this.currentAudioSource.playbackRate.value = this.settings.speed || 1.0;
                 
                 // 接続: source → gainNode → destination
-                source.connect(gainNode);
-                gainNode.connect(audioContext.destination);
+                this.currentAudioSource.connect(gainNode);
+                gainNode.connect(this.currentAudioContext.destination);
                 
                 // 再生終了のイベントリスナー
-                source.onended = () => {
+                this.currentAudioSource.onended = () => {
                     this.setPlayingState(false);
                     this.showNotification('AIVIS音声の再生が完了しました', 'success');
-                    audioContext.close();
+                    this.cleanupWebAudio();
                     resolve();
                 };
                 
                 // エラーハンドリング
-                source.onerror = (error) => {
+                this.currentAudioSource.onerror = (error) => {
                     this.setPlayingState(false);
-                    audioContext.close();
+                    this.cleanupWebAudio();
                     reject(new Error('Web Audio API再生エラー'));
                 };
                 
@@ -702,11 +707,12 @@ class TextToVoiceContent {
                 this.setPlayingState(true);
                 this.showNotification('AIVIS音声を再生中...', 'info');
                 console.log('Web Audio API音声開始');
-                source.start(0);
+                this.currentAudioSource.start(0);
                 
             } catch (error) {
                 console.error('Web Audio API エラー:', error);
                 this.setPlayingState(false);
+                this.cleanupWebAudio();
                 reject(error);
             }
         });
@@ -767,12 +773,38 @@ class TextToVoiceContent {
             this.currentAudio.currentTime = 0;
         }
         
+        // Web Audio APIの音声を停止
+        this.stopCurrentWebAudio();
+        
         // Web Speech APIの音声も停止
         if ('speechSynthesis' in window) {
             speechSynthesis.cancel();
         }
         
         this.setPlayingState(false);
+        this.showNotification('音声再生を停止しました', 'info');
+    }
+
+    // Web Audio APIの再生を停止
+    stopCurrentWebAudio() {
+        if (this.currentAudioSource) {
+            try {
+                this.currentAudioSource.stop();
+            } catch (error) {
+                // 既に停止している場合はエラーを無視
+                console.log('AudioSource already stopped');
+            }
+        }
+        this.cleanupWebAudio();
+    }
+
+    // Web Audio APIのリソースをクリーンアップ
+    cleanupWebAudio() {
+        if (this.currentAudioContext && this.currentAudioContext.state !== 'closed') {
+            this.currentAudioContext.close();
+        }
+        this.currentAudioSource = null;
+        this.currentAudioContext = null;
     }
 
     setPlayingState(isPlaying) {
