@@ -39,14 +39,17 @@
                 <h2>AIVIS API設定</h2>
                 <div class="form-group">
                     <label for="apiKey">APIキー</label>
+                    <p style="font-size: 12px; color: #666; margin-bottom: 8px;">
+                        高品質な音声合成を利用するには、AIVIS Cloud APIキーが必要です
+                    </p>
                     <div class="input-with-button">
                         <input type="password" id="apiKey" placeholder="AIVIS APIキーを入力">
                         <button id="toggleApiKey" class="btn-toggle" title="表示/非表示">👁️</button>
                     </div>
                     <div class="form-help">
-                        <a href="https://hub.aivis-project.com/cloud-api/api-keys" target="_blank">
-                            🔗 APIキーを取得
-                        </a>
+                        <button id="getApiKeyBtn" class="btn btn-link">
+                            🔑 APIキーを取得
+                        </button>
                     </div>
                     <div id="apiStatus" class="status-indicator">
                         <span class="status-text">APIキーを入力してください</span>

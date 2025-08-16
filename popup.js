@@ -39,6 +39,7 @@ class TTSPopup {
         // API設定
         this.apiKeyInput = document.getElementById('apiKey');
         this.toggleApiKeyBtn = document.getElementById('toggleApiKey');
+        this.getApiKeyBtn = document.getElementById('getApiKeyBtn');
         this.apiStatus = document.getElementById('apiStatus');
         this.modelSelect = document.getElementById('modelSelect');
         this.customModelNameInput = document.getElementById('customModelName');
@@ -101,6 +102,10 @@ class TTSPopup {
 
         this.toggleApiKeyBtn.addEventListener('click', () => {
             this.toggleApiKeyVisibility();
+        });
+
+        this.getApiKeyBtn.addEventListener('click', () => {
+            this.openApiKeyPage();
         });
 
         this.modelSelect.addEventListener('change', () => {
@@ -475,13 +480,20 @@ class TTSPopup {
         this.statusText.textContent = message;
     }
 
+    openApiKeyPage() {
+        // AIVIS APIキー取得サイトを新しいタブで開く
+        chrome.tabs.create({
+            url: 'https://hub.aivis-project.com/cloud-api/api-keys',
+            active: true
+        });
+    }
+
     openAivisSite() {
         // AIVIS音声モデルサイトを新しいタブで開く
         chrome.tabs.create({
             url: 'https://hub.aivis-project.com/search',
             active: true
         });
-        this.showNotification('AIVIS音声モデルサイトを開きました', 'success');
     }
 }
 
