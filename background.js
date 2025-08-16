@@ -3,6 +3,7 @@ class TTSBackground {
     constructor() {
         this.audioCache = new Map();
         this.settings = {
+            enabled: true, // 拡張機能の有効/無効
             apiKey: '',
             speed: 1.0,
             volume: 1.0,
@@ -82,6 +83,11 @@ class TTSBackground {
         try {
             // 設定をマージ
             const mergedSettings = { ...this.settings, ...settings };
+            
+            // 拡張機能が無効の場合は処理を中止
+            if (!mergedSettings.enabled) {
+                throw new Error('拡張機能が無効になっています。設定画面から有効にしてください。');
+            }
             
             // APIキーをチェック
             if (!mergedSettings.apiKey) {

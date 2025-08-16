@@ -2,6 +2,7 @@
 class TTSPopup {
     constructor() {
         this.settings = {
+            enabled: true, // 拡張機能の有効/無効
             apiKey: '',
             speed: 1.0,
             volume: 1.0,
@@ -36,6 +37,10 @@ class TTSPopup {
     }
 
     initializeElements() {
+        // 拡張機能有効/無効トグル
+        this.extensionToggle = document.getElementById('extensionEnabled');
+        this.toggleLabel = document.getElementById('toggleLabel');
+        
         // API設定
         this.apiKeyInput = document.getElementById('apiKey');
         this.toggleApiKeyBtn = document.getElementById('toggleApiKey');
@@ -93,6 +98,13 @@ class TTSPopup {
     }
 
     attachEventListeners() {
+        // 拡張機能有効/無効トグル
+        this.extensionToggle.addEventListener('change', () => {
+            this.settings.enabled = this.extensionToggle.checked;
+            this.updateToggleLabel();
+            this.saveSettings();
+        });
+        
         // API設定
         this.apiKeyInput.addEventListener('input', () => {
             this.settings.apiKey = this.apiKeyInput.value.trim();
@@ -195,6 +207,10 @@ class TTSPopup {
     }
 
     updateUI() {
+        // 拡張機能有効/無効トグル
+        this.extensionToggle.checked = this.settings.enabled;
+        this.updateToggleLabel();
+        
         // API設定
         this.apiKeyInput.value = this.settings.apiKey;
         
@@ -223,6 +239,16 @@ class TTSPopup {
         }
 
         this.updateApiStatus();
+    }
+
+    updateToggleLabel() {
+        if (this.settings.enabled) {
+            this.toggleLabel.textContent = '有効';
+            this.toggleLabel.classList.remove('disabled');
+        } else {
+            this.toggleLabel.textContent = '無効';
+            this.toggleLabel.classList.add('disabled');
+        }
     }
 
     updateApiStatus() {
@@ -397,6 +423,11 @@ class TTSPopup {
     }
 
     async testSpeech() {
+        if (!this.settings.enabled) {
+            this.showNotification('拡張機能が無効になっています', 'warning');
+            return;
+        }
+        
         if (!this.settings.apiKey) {
             this.showNotification('APIキーを設定してください', 'error');
             return;
