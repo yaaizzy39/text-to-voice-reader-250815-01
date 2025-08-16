@@ -24,7 +24,6 @@ class TextToVoiceContent {
     }
 
     init() {
-        console.log('Text to Voice Reader Content Script が初期化されました');
         this.loadSettings();
         this.createUI();
         this.attachEventListeners();
@@ -40,7 +39,6 @@ class TextToVoiceContent {
             const currentText = window.getSelection().toString().trim();
             
             if (currentText !== lastSelectedText) {
-                console.log('ポーリングでテキスト選択変更を検出:', currentText.substring(0, 30));
                 lastSelectedText = currentText;
                 this.handleTextSelection(null);
             }
@@ -48,7 +46,6 @@ class TextToVoiceContent {
         
         // 500msごとにチェック
         setInterval(checkSelection, 500);
-        console.log('テキスト選択ポーリングを開始しました');
     }
 
     async loadSettings() {
@@ -58,7 +55,7 @@ class TextToVoiceContent {
                 this.settings = { ...this.settings, ...result.ttsSettings };
             }
         } catch (error) {
-            console.error('設定の読み込みに失敗:', error);
+            // 設定読み込み失敗時は既定値を使用
         }
     }
 
@@ -403,46 +400,30 @@ class TextToVoiceContent {
                 selectedText = range.toString().trim();
             }
             
-            console.log('検出されたテキスト選択:', {
-                text: selectedText,
-                length: selectedText.length,
-                selectionType: selection ? selection.type : 'unknown',
-                rangeCount: selection ? selection.rangeCount : 0
-            });
             
         } catch (error) {
-            console.error('テキスト選択検出エラー:', error);
+            // テキスト選択検出エラー時は何もしない
         }
         
         if (selectedText && selectedText.length > 0) {
-            console.log('ボタン表示条件を満たしました:', selectedText.substring(0, 50));
             this.selectedText = selectedText;
             this.showButton(e);
         } else {
-            console.log('テキストが選択されていないか、条件を満たしていません');
             this.hideButton();
         }
     }
 
     showButton(e) {
         if (!this.button || !document.contains(this.button)) {
-            console.error('ボタンが存在しないか、DOMから削除されています');
             return;
         }
         
-        console.log('showButton() が呼び出されました');
-        
         const selection = window.getSelection();
-        console.log('選択情報:', {
-            rangeCount: selection.rangeCount,
-            toString: selection.toString()
-        });
         
         if (selection.rangeCount > 0) {
             const range = selection.getRangeAt(0);
             const rect = range.getBoundingClientRect();
             
-            console.log('選択範囲の位置:', rect);
             
             // 複数行選択時の処理：選択範囲の高さが30px超の場合は中央寄りに配置
             const isMultiLine = rect.height > 30;
@@ -480,14 +461,6 @@ class TextToVoiceContent {
                 }
             }
             
-            console.log('ボタンの配置位置:', {
-                original: { x, y },
-                adjusted: { x: adjustedX, y: adjustedY },
-                windowSize: { width: window.innerWidth, height: window.innerHeight },
-                selectionSize: { width: rect.width, height: rect.height },
-                isMultiLine: isMultiLine,
-                buttonContainerWidth: buttonContainerWidth
-            });
             
             // ボタンを選択範囲の近くに表示
             this.button.style.setProperty('left', `${adjustedX}px`, 'important');
@@ -498,27 +471,14 @@ class TextToVoiceContent {
             this.button.style.setProperty('visibility', 'visible', 'important');
             this.button.style.setProperty('opacity', '1', 'important');
             
-            console.log('ボタンのスタイルを適用しました:', {
-                display: this.button.style.display,
-                visibility: this.button.style.visibility,
-                position: this.button.style.position,
-                left: this.button.style.left,
-                top: this.button.style.top,
-                zIndex: this.button.style.zIndex
-            });
             
             // アニメーション効果を簡素化
             this.button.style.setProperty('opacity', '0', 'important');
             setTimeout(() => {
                 if (this.button && document.contains(this.button)) {
                     this.button.style.setProperty('opacity', '1', 'important');
-                    console.log('ボタンのフェードイン完了');
                 }
             }, 50);
-            
-            console.log('ボタン表示処理完了');
-        } else {
-            console.log('選択範囲が見つかりませんでした');
         }
     }
 
@@ -955,7 +915,6 @@ class TextToVoiceContent {
             });
 
             if (response.success && response.audioData) {
-                console.log(`ブロック${blockIndex + 1}の音声データを取得:`, response.audioData);
                 
                 // 各ブロックの音声データを保存
                 if (!this.audioBlocks[blockIndex]) {
@@ -1009,20 +968,7 @@ class TextToVoiceContent {
             this.currentAudio.volume = this.settings.volume;
             this.currentAudio.playbackRate = this.settings.speed;
 
-            this.currentAudio.addEventListener('loadstart', () => {
-                console.log('音声読み込み開始');
-            });
-
-            this.currentAudio.addEventListener('canplaythrough', () => {
-                console.log('音声再生準備完了');
-            });
-
-            this.currentAudio.addEventListener('play', () => {
-                console.log('音声再生開始');
-            });
-
             this.currentAudio.addEventListener('ended', () => {
-                console.log('音声再生終了');
                 this.setPlayingState(false);
                 if (audioUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(audioUrl);
@@ -1031,7 +977,6 @@ class TextToVoiceContent {
             });
 
             this.currentAudio.addEventListener('error', (e) => {
-                console.error('音声再生エラー:', e);
                 this.setPlayingState(false);
                 if (audioUrl.startsWith('blob:')) {
                     URL.revokeObjectURL(audioUrl);
@@ -1045,7 +990,6 @@ class TextToVoiceContent {
 
             // 音声再生開始
             this.currentAudio.play().catch((error) => {
-                console.error('音声再生開始エラー:', error);
                 // フォールバック: ブラウザ標準のWeb Speech APIを使用
                 this.playWithWebSpeechAPI(this.selectedText)
                     .then(() => resolve())
@@ -1108,11 +1052,9 @@ class TextToVoiceContent {
                 // 再生開始
                 this.setPlayingState(true);
                 this.showNotification('AIVIS音声を再生中...', 'info');
-                console.log('Web Audio API音声開始');
                 this.currentAudioSource.start(0);
                 
             } catch (error) {
-                console.error('Web Audio API エラー:', error);
                 this.setPlayingState(false);
                 this.cleanupWebAudio();
                 reject(error);
@@ -1189,11 +1131,9 @@ class TextToVoiceContent {
                 this.setPlayingState(true);
                 const blockInfo = this.textBlocks.length > 1 ? ` (${blockIndex + 1}/${this.textBlocks.length})` : '';
                 this.showNotification(`AIVIS音声を再生中${blockInfo}...`, 'info');
-                console.log(`ブロック${blockIndex + 1}のWeb Audio API音声開始`);
                 this.currentAudioSource.start(0);
                 
             } catch (error) {
-                console.error('Web Audio API エラー:', error);
                 this.setPlayingState(false);
                 this.isPlayingSequence = false;
                 this.cleanupWebAudio();
@@ -1229,19 +1169,16 @@ class TextToVoiceContent {
             }
 
             utterance.onstart = () => {
-                console.log('Web Speech API音声開始');
                 this.setPlayingState(true);
                 this.showNotification('ブラウザ標準音声で再生中', 'info');
             };
 
             utterance.onend = () => {
-                console.log('Web Speech API音声終了');
                 this.setPlayingState(false);
                 resolve();
             };
 
             utterance.onerror = (event) => {
-                console.error('Web Speech APIエラー:', event.error);
                 this.setPlayingState(false);
                 reject(new Error(`Web Speech APIエラー: ${event.error}`));
             };
@@ -1289,7 +1226,6 @@ class TextToVoiceContent {
                 this.currentAudioSource.stop();
             } catch (error) {
                 // 既に停止している場合はエラーを無視
-                console.log('AudioSource already stopped');
             }
         }
         this.cleanupWebAudio();
@@ -1455,38 +1391,30 @@ class TextToVoiceContent {
 }
 
 // Content script初期化 - より確実でサイト互換性の高い初期化
-console.log('Text to Voice Reader Content Script が読み込まれました - document.readyState:', document.readyState);
 
 let initializationAttempts = 0;
 const MAX_INIT_ATTEMPTS = 5;
 
 function initializeTextToVoice() {
     initializationAttempts++;
-    console.log(`TextToVoiceContent 初期化試行 ${initializationAttempts}/${MAX_INIT_ATTEMPTS}`);
     
     try {
         // 既に初期化されている場合はスキップ
         if (window.textToVoiceContent) {
-            console.log('TextToVoiceContent は既に初期化されています');
             return;
         }
         
         // 必要な要素が存在するかチェック
         if (!document.documentElement || (!document.body && initializationAttempts < MAX_INIT_ATTEMPTS)) {
-            console.log('DOM要素が準備されていません。再試行します...');
             setTimeout(initializeTextToVoice, 200 * initializationAttempts);
             return;
         }
         
         window.textToVoiceContent = new TextToVoiceContent();
-        console.log('TextToVoiceContent の初期化が完了しました');
         
     } catch (error) {
-        console.error('TextToVoiceContent の初期化中にエラーが発生:', error);
-        
         // 最大試行回数に達していない場合は再試行
         if (initializationAttempts < MAX_INIT_ATTEMPTS) {
-            console.log(`${1000 * initializationAttempts}ms後に再試行します...`);
             setTimeout(initializeTextToVoice, 1000 * initializationAttempts);
         }
     }
@@ -1531,7 +1459,6 @@ function startDOMObserver() {
         }
         
         if (shouldReinitialize && !window.textToVoiceContent) {
-            console.log('DOM変更を検出。再初期化します...');
             setTimeout(initializeTextToVoice, 100);
         }
     });

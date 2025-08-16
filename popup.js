@@ -77,7 +77,7 @@ class TTSPopup {
                 this.settings = response.settings;
             }
         } catch (error) {
-            console.error('設定の読み込みに失敗:', error);
+            // 設定の読み込み失敗時は何もしない
         }
     }
 
@@ -87,9 +87,8 @@ class TTSPopup {
                 action: 'updateSettings',
                 settings: this.settings
             });
-            console.log('設定を保存しました:', this.settings);
         } catch (error) {
-            console.error('設定の保存に失敗:', error);
+            // 設定の保存失敗時は何もしない
         }
     }
 
@@ -137,15 +136,13 @@ class TTSPopup {
             }
         });
 
-        // デバッグ用：入力フィールドの変更を監視
+        // 入力フィールドの変更を監視
         this.customModelNameInput.addEventListener('input', (e) => {
-            console.log('モデル名入力変更:', e.target.value);
             // 入力内容を一時保存
             localStorage.setItem('tts_temp_model_name', e.target.value);
         });
 
         this.customModelIdInput.addEventListener('input', (e) => {
-            console.log('UUID入力変更:', e.target.value);
             // 入力内容を一時保存
             localStorage.setItem('tts_temp_model_id', e.target.value);
         });
@@ -290,7 +287,6 @@ class TTSPopup {
             }
 
         } catch (error) {
-            console.error('モデル一覧の取得に失敗:', error);
             this.showNotification('モデル一覧の取得に失敗しました', 'error');
         }
     }
@@ -338,8 +334,6 @@ class TTSPopup {
     addCustomModel() {
         const customId = this.customModelIdInput.value.trim();
         const customName = this.customModelNameInput.value.trim();
-        
-        console.log('addCustomModel called:', { customId, customName });
         
         if (!customId) {
             this.showNotification('モデルUUIDを入力してください', 'error');
@@ -446,7 +440,6 @@ class TTSPopup {
             }
 
         } catch (error) {
-            console.error('音声テストエラー:', error);
             this.showNotification(`音声テストに失敗: ${error.message}`, 'error');
         } finally {
             this.testBtn.disabled = false;

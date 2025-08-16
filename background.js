@@ -13,11 +13,9 @@ class TTSBackground {
     }
 
     init() {
-        console.log('Background script 初期化開始');
         this.loadSettings();
         this.setupMessageHandlers();
         this.setupContextMenu();
-        console.log('Background script 初期化完了');
     }
 
     async loadSettings() {
@@ -27,13 +25,12 @@ class TTSBackground {
                 this.settings = { ...this.settings, ...result.ttsSettings };
             }
         } catch (error) {
-            console.error('設定の読み込みに失敗:', error);
+            // 設定読み込み失敗時は既定値を使用
         }
     }
 
     setupMessageHandlers() {
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-            console.log('Background: メッセージ受信:', message.action);
             if (message.action === 'generateSpeech') {
                 this.handleGenerateSpeech(message.text, message.settings)
                     .then(response => sendResponse(response))
@@ -75,7 +72,7 @@ class TTSBackground {
                         action: 'playSelectedText'
                     });
                 } catch (error) {
-                    console.error('Content scriptとの通信に失敗:', error);
+                    // Content scriptが注入されていないタブは無視
                 }
             }
         });
@@ -96,7 +93,6 @@ class TTSBackground {
             
             // キャッシュから確認
             if (this.audioCache.has(cacheKey)) {
-                console.log('キャッシュから音声を取得:', text.substring(0, 30));
                 return {
                     success: true,
                     audioData: this.audioCache.get(cacheKey),
@@ -105,7 +101,6 @@ class TTSBackground {
             }
 
             // AIVIS API経由で音声生成
-            console.log('AIVIS APIで音声生成:', text.substring(0, 30));
             const audioData = await this.generateSpeechFromAPI(text, mergedSettings);
             
             // キャッシュに保存（最大50個まで）
@@ -123,7 +118,6 @@ class TTSBackground {
             };
 
         } catch (error) {
-            console.error('音声生成エラー:', error);
             return {
                 success: false,
                 error: error.message
@@ -142,11 +136,7 @@ class TTSBackground {
             output_format: 'mp3'
         };
 
-        console.log('AIVIS APIリクエスト:', requestData);
-        console.log('使用中のAPIキー:', settings.apiKey ? `${settings.apiKey.substring(0, 10)}...` : 'なし');
-
         try {
-            console.log('AIVIS APIを呼び出し中...');
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: {
@@ -155,8 +145,6 @@ class TTSBackground {
                 },
                 body: JSON.stringify(requestData)
             });
-
-            console.log('AIVIS APIレスポンス:', response.status, response.statusText);
 
             if (!response.ok) {
                 let errorMessage = `AIVIS API エラー: ${response.status} ${response.statusText}`;
@@ -189,7 +177,6 @@ class TTSBackground {
             const audioBlob = await response.blob();
             
             if (audioBlob.size <= 50) {
-                console.warn('音声データが小さすぎる、フォールバックを実行');
                 return await this.generateFallbackSpeech(text, settings);
             }
 
@@ -205,13 +192,6 @@ class TTSBackground {
                 binaryString += String.fromCharCode.apply(null, chunk);
             }
             const base64String = btoa(binaryString);
-            
-            console.log('音声生成成功:', {
-                size: audioBlob.size,
-                type: audioBlob.type,
-                arrayBufferLength: arrayBuffer.byteLength,
-                base64Length: base64String.length
-            });
 
             return {
                 base64Data: base64String,
@@ -219,10 +199,7 @@ class TTSBackground {
             };
 
         } catch (error) {
-            console.error('AIVIS API呼び出しエラー:', error);
-            
             if (error.name === 'TypeError' && error.message.includes('fetch')) {
-                console.warn('ネットワークエラー、フォールバックを実行');
                 return await this.generateFallbackSpeech(text, settings);
             }
             
@@ -242,12 +219,11 @@ class TTSBackground {
             await chrome.storage.sync.set({
                 ttsSettings: this.settings
             });
-            console.log('設定を保存しました:', this.settings);
             
             // 全タブのcontent scriptに設定変更を通知
             this.notifySettingsChange();
         } catch (error) {
-            console.error('設定の保存に失敗:', error);
+            // 設定保存失敗時は何もしない
         }
     }
 
@@ -263,12 +239,10 @@ class TTSBackground {
                     });
                 } catch (error) {
                     // content scriptが注入されていないタブは無視
-                    console.log(`タブ ${tab.id} への通知をスキップ:`, error.message);
                 }
             }
-            console.log('設定変更を全タブに通知しました');
         } catch (error) {
-            console.error('設定変更通知に失敗:', error);
+            // 通知失敗時は何もしない
         }
     }
 
