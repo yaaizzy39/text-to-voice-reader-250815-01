@@ -80,19 +80,18 @@ class TextToVoiceContent {
     }
 
     createUI() {
-        console.log('createUI が呼び出されました');
-        
+        console.log('createUI() が呼ばれました');
         try {
             this.injectStyles();
             this.createButton();
         } catch (error) {
-            console.error('UI作成でエラーが発生:', error);
+            console.log('createButton() でエラー、フォールバックを試行:', error);
             // フォールバック: 簡単な方法で再試行
             setTimeout(() => {
                 try {
                     this.createSimpleButton();
                 } catch (e) {
-                    console.error('フォールバック失敗:', e);
+                    console.log('フォールバック失敗:', e);
                 }
             }, 500);
         }
@@ -172,21 +171,17 @@ class TextToVoiceContent {
         const targetElement = document.head || document.documentElement;
         if (targetElement) {
             targetElement.appendChild(style);
-            console.log('スタイルを追加しました');
-        } else {
-            console.warn('スタイル追加先が見つかりません');
         }
     }
     
     createButton() {
         // 既にボタンが存在する場合はスキップ
         if (this.button && document.contains(this.button)) {
-            console.log('ボタンは既に存在します');
+            console.log('ボタンは既に存在するためスキップ');
             return;
         }
         
-        console.log('createButton が呼び出されました');
-        
+        console.log('新しいボタンを作成します');
         // 読み上げボタンを作成
         this.button = document.createElement('div');
         this.button.className = 'tts-button-container';
@@ -208,6 +203,8 @@ class TextToVoiceContent {
         
         this.applyButtonStyles();
         this.attachButtonToDOM();
+        console.log('createButton() - attachButtonEvents()を呼び出します');
+        this.attachButtonEvents();
     }
     
     applyButtonStyles() {
@@ -288,17 +285,77 @@ class TextToVoiceContent {
         `;
         
         (document.body || document.documentElement).appendChild(this.button);
+        
+        // シンプルボタンのイベントリスナーを設定
+        this.button.addEventListener('click', (e) => {
+            console.log('シンプルボタンクリック');
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleButtonClick();
+        });
+    }
+    
+    // ボタンのイベントリスナーを設定（ボタン作成後に呼び出し）
+    attachButtonEvents() {
+        console.log('attachButtonEvents() called');
+        console.log('playButton:', this.playButton);
+        console.log('downloadButton:', this.downloadButton);
+        
+        if (!this.playButton || !this.downloadButton) {
+            console.log('ボタン要素が見つかりません');
+            return;
+        }
+        
+        // 読み上げボタンクリック
+        this.playButton.addEventListener('click', (e) => {
+            console.log('読み上げボタンクリック');
+            e.preventDefault();
+            e.stopPropagation();
+            this.handleButtonClick();
+        });
+        
+        // 読み上げボタンマウスオーバー（デバッグ用）
+        this.playButton.addEventListener('mouseenter', () => {
+            console.log('読み上げボタンにマウスオーバー');
+        });
+        
+        // 読み上げボタンマウスダウン（デバッグ用）
+        this.playButton.addEventListener('mousedown', (e) => {
+            console.log('読み上げボタンマウスダウン');
+        });
+
+        // ダウンロードボタンクリック
+        this.downloadButton.addEventListener('click', (e) => {
+            console.log('ダウンロードボタンクリック');
+            e.preventDefault();
+            e.stopPropagation();
+            this.downloadAudio();
+        });
+        
+        console.log('ボタンイベントリスナーを設定しました');
     }
 
     attachEventListeners() {
         // マウスダウンで選択開始を検知
         document.addEventListener('mousedown', (e) => {
+            // ボタンをクリックした場合は選択状態にしない
+            if (e.target.closest('.tts-button-container')) {
+                console.log('ボタンクリック - 選択状態にしません');
+                return;
+            }
+            
             this.isSelecting = true;
             this.hideButton(); // 選択中はボタンを非表示
         });
         
         // マウスアップで選択終了を検知（ボタン表示のメインタイミング）
         document.addEventListener('mouseup', (e) => {
+            // ボタンをクリックした場合は処理しない
+            if (e.target.closest('.tts-button-container')) {
+                console.log('ボタンクリック終了 - テキスト選択処理をスキップ');
+                return;
+            }
+            
             if (this.isSelecting) {
                 this.isSelecting = false;
                 // 少し遅延させてテキスト選択状態をチェック
@@ -318,20 +375,6 @@ class TextToVoiceContent {
                     this.handleTextSelection(e);
                 }, 50);
             }
-        });
-
-        // 読み上げボタンクリック
-        this.playButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.handleButtonClick();
-        });
-
-        // ダウンロードボタンクリック
-        this.downloadButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            this.downloadAudio();
         });
 
         // クリック時にボタンを非表示（少し遅延させる）
@@ -401,17 +444,24 @@ class TextToVoiceContent {
         }
         
         if (selectedText && selectedText.length > 0) {
+            console.log('テキストが選択されました:', selectedText.substring(0, 50));
             this.selectedText = selectedText;
             this.showButton(e);
         } else {
+            console.log('テキスト選択なし、ボタンを非表示');
             this.hideButton();
         }
     }
 
     showButton(e) {
         if (!this.button || !document.contains(this.button)) {
+            console.log('ボタンが存在しないか、DOMにありません');
             return;
         }
+        
+        console.log('showButton() - ボタンを表示します');
+        console.log('ボタン要素:', this.button);
+        console.log('ボタンのクラス名:', this.button.className);
         
         const selection = window.getSelection();
         
@@ -466,12 +516,17 @@ class TextToVoiceContent {
             this.button.style.setProperty('visibility', 'visible', 'important');
             this.button.style.setProperty('opacity', '1', 'important');
             
+            console.log('ボタンスタイル設定完了 - 表示状態:');
+            console.log('display:', this.button.style.display);
+            console.log('visibility:', this.button.style.visibility);
+            console.log('position:', this.button.style.position);
             
             // アニメーション効果を簡素化
             this.button.style.setProperty('opacity', '0', 'important');
             setTimeout(() => {
                 if (this.button && document.contains(this.button)) {
                     this.button.style.setProperty('opacity', '1', 'important');
+                    console.log('ボタン表示完了 - フェードイン終了');
                 }
             }, 50);
         }
@@ -816,10 +871,23 @@ class TextToVoiceContent {
 
 
     async handleButtonClick() {
+        console.log('ボタンクリックが検知されました');
+        console.log('選択されたテキスト:', this.selectedText);
+        console.log('再生中:', this.isPlaying);
+        
         if (this.isPlaying) {
             this.stopPlayback();
         } else if (this.selectedText) {
             await this.playText(this.selectedText);
+        } else {
+            console.log('選択されたテキストがありません');
+            // 現在の選択状態を再確認
+            const currentSelection = window.getSelection().toString().trim();
+            console.log('現在の選択テキスト:', currentSelection);
+            if (currentSelection) {
+                this.selectedText = currentSelection;
+                await this.playText(this.selectedText);
+            }
         }
     }
 
