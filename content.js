@@ -192,9 +192,9 @@ class TextToVoiceContent {
                 <span class="tts-icon">🔊</span>
                 <span class="tts-text">読み上げ</span>
             </button>
-            <button class="tts-button tts-download-btn" style="display: none;">
+            <button class="tts-button tts-download-btn">
                 <span class="tts-icon">📥</span>
-                <span class="tts-text">MP3</span>
+                <span class="tts-text">DL</span>
             </button>
         `;
         this.button.id = 'tts-reader-button-' + Date.now(); // ユニークID
@@ -495,11 +495,28 @@ class TextToVoiceContent {
     hideButton() {
         this.button.style.setProperty('display', 'none', 'important');
         this.button.style.setProperty('visibility', 'hidden', 'important');
-        this.downloadButton.style.display = 'none';
         this.selectedText = '';
     }
 
     async downloadAudio() {
+        // 現在選択されているテキストを取得
+        const currentText = window.getSelection().toString().trim() || this.selectedText;
+        
+        if (!currentText) {
+            this.showNotification('ダウンロードするテキストを選択してください', 'error');
+            return;
+        }
+
+        // 選択されているテキストが前回と異なる場合、または音声データがない場合は新規生成
+        const needNewGeneration = !this.lastAudioData || 
+                                 !this.textBlocks || 
+                                 this.textBlocks.join('') !== currentText;
+
+        if (needNewGeneration) {
+            // 新しいテキストで音声生成
+            await this.generateAudioForDownload(currentText);
+        }
+
         // 長文の場合は全ブロック結合MP3を作成
         if (this.textBlocks && this.textBlocks.length > 1) {
             await this.downloadCombinedAudio();
@@ -508,7 +525,7 @@ class TextToVoiceContent {
 
         // 単一ブロックの場合は従来通り
         if (!this.lastAudioData) {
-            this.showNotification('ダウンロードする音声がありません', 'error');
+            this.showNotification('音声の生成に失敗しました', 'error');
             return;
         }
 
@@ -551,14 +568,41 @@ class TextToVoiceContent {
         }
     }
 
-    // 全ブロック結合MP3ダウンロード
-    async downloadCombinedAudio() {
+    // ダウンロード専用の音声生成
+    async generateAudioForDownload(text) {
         try {
-            this.showProgressModal(`全${this.textBlocks.length}ブロックの音声を生成中...`, 0, this.textBlocks.length);
+            this.showProgressModal('音声を生成中...', 0, 1);
             
-            // 不足している音声ブロックを生成
-            for (let i = 0; i < this.textBlocks.length; i++) {
-                if (!this.audioBlocks[i]) {
+            // テキストを分割
+            this.textBlocks = this.splitTextIntoBlocks(text, 1000);
+            this.audioBlocks = []; // リセット
+            
+            if (this.textBlocks.length === 1) {
+                // 単一ブロックの場合
+                this.updateProgressModal('音声を生成中...', 0, 1);
+                
+                const response = await chrome.runtime.sendMessage({
+                    action: 'generateSpeech',
+                    text: this.textBlocks[0],
+                    settings: this.settings
+                });
+                
+                if (response.success && response.audioData) {
+                    this.lastAudioData = {
+                        base64Data: response.audioData.base64Data,
+                        mimeType: response.audioData.mimeType,
+                        text: this.textBlocks[0],
+                        timestamp: new Date().toISOString()
+                    };
+                    this.audioBlocks[0] = response.audioData;
+                } else {
+                    throw new Error(response.error || '音声生成に失敗しました');
+                }
+            } else {
+                // 複数ブロックの場合
+                this.updateProgressModal(`全${this.textBlocks.length}ブロックの音声を生成中...`, 0, this.textBlocks.length);
+                
+                for (let i = 0; i < this.textBlocks.length; i++) {
                     this.updateProgressModal(`ブロック ${i + 1}/${this.textBlocks.length} を音声合成中...`, i, this.textBlocks.length);
                     
                     const response = await chrome.runtime.sendMessage({
@@ -574,6 +618,20 @@ class TextToVoiceContent {
                     }
                 }
             }
+            
+            this.hideProgressModal();
+            
+        } catch (error) {
+            this.hideProgressModal();
+            console.error('ダウンロード用音声生成エラー:', error);
+            throw error;
+        }
+    }
+
+    // 全ブロック結合MP3ダウンロード
+    async downloadCombinedAudio() {
+        try {
+            // 音声ブロックが既に生成されている前提で処理
             
             this.updateProgressModal('音声ファイルを結合中...', this.textBlocks.length, this.textBlocks.length);
             
@@ -891,8 +949,7 @@ class TextToVoiceContent {
                 }
                 const arrayBuffer = bytes.buffer;
                 
-                // ダウンロードボタンを表示
-                this.downloadButton.style.display = 'flex';
+                // ダウンロードボタンは常に表示
                 
                 // Web Audio APIで直接ArrayBufferから再生（CSP制限回避）
                 await this.playAudioBufferWithSequence(arrayBuffer, blockIndex);
