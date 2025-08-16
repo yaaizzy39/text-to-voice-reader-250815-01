@@ -281,6 +281,17 @@ body {
     justify-content: center;
 }
 
+/* ヘルプアクション */
+.help-actions {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
+}
+
+.help-actions .btn {
+    min-width: 120px;
+}
+
 /* ステータス */
 .status-indicator {
     margin-top: 8px;
